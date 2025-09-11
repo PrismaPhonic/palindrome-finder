@@ -1,0 +1,98 @@
+#+TITLE: Palindromic Products Benchmarking
+#+AUTHOR: Peter Farr
+
+* Overview
+This project compares different implementations of the "palindromic products"
+coding challenge, originally from Exercism (https://exercism.org).
+
+** The problem
+Given a range of integers [MIN..MAX], find:
+- the smallest palindromic product of two factors in that range
+- the largest palindromic product of two factors in that range
+
+A palindromic product is a product whose decimal representation is a palindrome.
+
+Each function returns:
+1. The palindrome value itself
+2. The list of factor pairs that generate it
+
+** The goal
+We implement and benchmark solutions in both Common Lisp (SBCL) and Rust.
+The objective is to measure performance trade-offs across languages and
+algorithmic optimizations.
+
+* Project layout
+- =lisp/= Common Lisp implementations and build scripts
+- =rust-palindrome/= Rust solution binaries and library
+- =palindrome-benchmark/= Criterion harness that drives all binaries
+- =target-bin/= where all compiled executables are collected
+
+* Build all binaries (Lisp then Rust)
+
+** Common Lisp (SBCL)
+From the =lisp/= directory, run each build script with SBCL like this:
+
+#+BEGIN_SRC shell
+cd lisp
+
+sbcl --dynamic-space-size 4096 --noinform --disable-debugger --non-interactive \
+     --load build-fast-smallest-inner.lisp
+
+sbcl --dynamic-space-size 4096 --noinform --disable-debugger --non-interactive \
+     --load build-fast-largest-inner.lisp
+
+sbcl --dynamic-space-size 4096 --noinform --disable-debugger --non-interactive \
+     --load build-comm-smallest-inner.lisp
+
+sbcl --dynamic-space-size 4096 --noinform --disable-debugger --non-interactive \
+     --load build-comm-largest-inner.lisp
+#+END_SRC
+
+Each command produces an executable in =target-bin/=:
+- palprod-fast-smallest-inner
+- palprod-fast-largest-inner
+- palprod-comm-smallest-inner
+- palprod-comm-largest-inner
+
+** Rust
+Build the Rust solution in release mode, then copy the binaries to =target-bin/=:
+
+#+BEGIN_SRC shell
+cd rust-palindrome
+cargo build --release
+
+cp target/release/palprod-rust-smallest ../target-bin/
+cp target/release/palprod-rust-largest  ../target-bin/
+#+END_SRC
+
+After these steps, =target-bin/= should contain six executables:
+- palprod-fast-smallest-inner
+- palprod-fast-largest-inner
+- palprod-comm-smallest-inner
+- palprod-comm-largest-inner
+- palprod-rust-smallest
+- palprod-rust-largest
+
+* Run the Criterion suite
+The Criterion project expects all executables to already be present in =target-bin/=.
+
+#+BEGIN_SRC shell
+cd palindrome-benchmark
+cargo build --release
+cargo bench
+#+END_SRC
+
+Criterion will run the configured scenarios and report timing distributions and
+comparisons.
+
+* Notes
+- Both languages use a numeric half-reversal palindrome check (no strings).
+- The Common Lisp code adds type declarations to encourage fixnum arithmetic in SBCL.
+- We apply pruning (outer and inner) and early exits (for example divisibility by 11 on even-digit products) to reduce calls to the palindrome predicate.
+
+* Attribution
+Problem statement: Exercism, Common Lisp track, Palindrome Products
+https://exercism.org/tracks/common-lisp/exercises/palindrome-products
+
+This repository extends the original exercise with performance-focused
+implementations and cross-language benchmarks.
