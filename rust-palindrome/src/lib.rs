@@ -1,13 +1,75 @@
+//! Palindromic Products
+//! =========================================
+//!
+//! Problem
+//! -------
+//! Given an inclusive range [min..max], find:
+//!   1) the smallest palindromic product of two factors in that range
+//!   2) the largest palindromic product of two factors in that range
+//! and also return all factor pairs (x, y) with min <= x <= y <= max that
+//! produce that product.
+//!
+//! Approach (mirrors the SBCL/Common Lisp version)
+//! -----------------------------------------------
+//! 1) Palindrome test (numeric, no strings):
+//!    - Early outs: single-digit numbers are palindromes; numbers ending in 0
+//!      (and not 0 itself) are not palindromes.
+//!    - Even-length palindromes must be divisible by 11 (number theory fact).
+//!      We fast-reject even-length numbers not divisible by 11.
+//!    - Half-reverse: build the reverse of the low half of the digits until
+//!      rev >= m, then compare (m == rev) or (m == rev/10). This avoids a full
+//!      reversal and reduces divisions.
+//!
+//! 2) Search structure with strong pruning:
+//!    - For the smallest search:
+//!        * x ascends (min -> max).
+//!        * Outer prune: if x * x >= best, later rows cannot improve best.
+//!        * For each x, cap y at y_upper = min(max, floor((best-1)/x)).
+//!          That row then only tries x..=y_upper. First palindrome found in
+//!          that row is the smallest for that row; update best and continue.
+//!    - For the largest search:
+//!        * x descends (max -> min).
+//!        * Outer prune: if x * max <= best, earlier rows cannot improve best.
+//!        * For each x, start y at max and stop when y_lower = max(x, floor(best/x)+1).
+//!          The first palindrome found in that row is the largest for that row;
+//!          update best and continue.
+//!
+//! 3) Factor-pair enumeration (for the final product):
+//!    - Use a tight divisor window:
+//!         x in [ ceil(product / max) .. min(max, isqrt(product)) ]
+//!      For each x in that window, if product % x == 0, push (x, product/x)
+//!      if y is in range and y >= x.
+//!
+//! Performance notes
+//! -----------------
+//! - The half-reverse palindrome + 11 rule reduces calls to the palindrome test.
+//! - The tight y bounds in both searches greatly shrink the nested loops.
+//! - The factor enumeration window keeps divisibility checks minimal.
+//! - Build with release settings (opt-level=3, lto=thin, codegen-units=1,
+//!   panic=abort). Consider RUSTFLAGS="-C target-cpu=native" for local runs.
+//!
+//! Correctness notes
+//! -----------------
+//! - The searches return None if min > max or if no palindrome exists.
+//! - Factor collection uses ordered pairs (x <= y) within [min..max] only.
+//!
+//! This module is documented to match the Common Lisp file so readers can
+//! compare the designs side-by-side.
+
 use std::io::{BufRead, BufReader, Write};
 use std::str::FromStr;
 
+//
+// Palindrome helpers
+//
+
 /// Returns true if `n` has an even number of decimal digits.
 ///
-/// # Preconditions
-/// - Must only be called with `n >= 11`.
-/// - Callers are responsible for filtering out `n < 10` and trailing-zero cases.
+/// Preconditions:
+/// - Call only with `n >= 11`. Callers should filter out `n < 10` and trailing-zero cases.
 ///
-/// Used by `is_pal` to apply the "even-length palindromes must be divisible by 11" rule.
+/// Rationale:
+/// We use this to apply the rule "even-length palindromes must be divisible by 11".
 #[inline(always)]
 fn has_even_digits(n: u64) -> bool {
     debug_assert!(n >= 11);
@@ -30,26 +92,37 @@ fn has_even_digits(n: u64) -> bool {
         1_000_000_000_000_000..=9_999_999_999_999_999 => true,     // 16
         10_000_000_000_000_000..=99_999_999_999_999_999 => false,  // 17
         100_000_000_000_000_000..=999_999_999_999_999_999 => true, // 18
-        // TODO: Add more logic for rest of u64 range. For now this matches CL solution.
-        _ => false, // 19+ digits (up to u64::MAX) => odd length
+        // For the rest of u64 range (19+ digits), treat as odd length to match
+        // the current Common Lisp mapping. Adjust if you ever extend CL bounds.
+        _ => false,
     }
 }
 
+/// Return true if `n` is a decimal palindrome (numeric half-reversal).
+///
+/// Fast-paths:
+/// - `n < 10` is palindrome
+/// - `n % 10 == 0` (and `n != 0`) cannot be palindrome
+/// - even-length palindromes must be divisible by 11; if not, reject
+///
+/// Core:
+/// - Build `rev` by taking right digits of `m` until `rev >= m`.
+/// - Then return `m == rev || m == rev/10`.
 #[inline]
 pub fn is_pal(n: u64) -> bool {
     if n < 10 {
         return true;
     }
-
+    // Non-zero numbers ending in 0 cannot be palindromes.
     if n % 10 == 0 {
         return false;
     }
-
     // Even-length palindromes must be divisible by 11.
     if has_even_digits(n) && n % 11 != 0 {
         return false;
     }
 
+    // Half-reverse
     let mut m = n;
     let mut rev: u64 = 0;
     while m > rev {
@@ -60,9 +133,14 @@ pub fn is_pal(n: u64) -> bool {
     m == rev || m == rev / 10
 }
 
+//
+// Factor pair collection
+//
+
+/// When `product == 0` and `0` is in range, valid ordered pairs are `(0, y)`
+/// for all `y in [min..max]`. Otherwise the set is empty.
 #[inline]
 fn collect_zero_factor_pairs(min: u64, max: u64) -> Vec<(u64, u64)> {
-    // When product == 0 and 0 is in range, valid ordered pairs are (0, y) for all y in [min, max].
     if min == 0 {
         (min..=max).map(|y| (0, y)).collect()
     } else {
@@ -70,46 +148,138 @@ fn collect_zero_factor_pairs(min: u64, max: u64) -> Vec<(u64, u64)> {
     }
 }
 
+/// Collect ordered factor pairs `(x, y)` (with `x <= y`) such that
+/// `x * y == product` and both factors lie in `[min..max]`.
+///
+/// Uses a tight divisor window:
+///   x in [ ceil(product / max) .. min(max, isqrt(product)) ]
 #[inline]
 pub fn collect_factor_pairs(product: u64, min: u64, max: u64) -> Vec<(u64, u64)> {
     if product == 0 {
         return collect_zero_factor_pairs(min, max);
     }
-    let mut out = Vec::new();
-    for x in min..=max {
-        if x == 0 {
-            continue;
-        } // product != 0 ⇒ skip div-by-zero
-        if product % x != 0 {
-            continue;
-        } // exact divisor?
-        let q = product / x;
-        if x <= q && q <= max {
-            out.push((x, q)); // ordered: x ≤ q
-        }
-    }
-    out
-}
 
-#[inline]
-pub fn largest(min: u64, max: u64) -> Option<(u64, Vec<(u64, u64)>)> {
-    let mut best: u64 = 0;
-    // x: max -> min with pruning
-    for x in (min..=max).rev() {
-        if x.saturating_mul(max) <= best {
-            break;
-        } // outer prune
-        for y in (x..=max).rev() {
-            let p = x.saturating_mul(y);
-            if p <= best {
-                break;
-            } // inner prune
-            if is_pal(p) {
-                best = p; // row’s largest
-                break;
+    // Tight window: x in [ceil(product/max) .. min(max, isqrt(product))]
+    let low = product.div_ceil(max).max(min);
+    let high = product.isqrt().min(max);
+
+    let mut out = Vec::new();
+    for x in low..=high {
+        if product % x == 0 {
+            let y = product / x;
+            // y is automatically >= x because x <= isqrt(product)
+            if y >= min && y <= max {
+                out.push((x, y));
             }
         }
     }
+
+    out
+}
+
+//
+// Smallest / largest searches with pruning
+//
+
+/// Find the smallest palindromic product in `[min..max]` and its factor pairs.
+///
+/// Returns `Some((product, pairs))` or `None` if either the range is invalid or
+/// no palindrome exists.
+///
+/// Algorithm:
+/// - `x` ascends from `min` to `max`.
+/// - Outer prune: if `x*x >= best`, later rows cannot improve `best`.
+/// - For a fixed `x`, we only need `y` up to `y_upper = min(max, (best-1)/x)`.
+///   If `y_upper < x`, there is no work in that row.
+/// - Iterate `y` from `x` to `y_upper`; the first palindrome in that row is
+///   the row minimum; update `best` and continue.
+#[inline]
+pub fn smallest(min: u64, max: u64) -> Option<(u64, Vec<(u64, u64)>)> {
+    if min > max {
+        return None;
+    }
+
+    let mut best = u64::MAX;
+
+    for x in min..=max {
+        let xx = x.saturating_mul(x);
+        if xx >= best {
+            break; // outer prune
+        }
+
+        // Row cap: only products < best matter.
+        let y_upper = ((best - 1) / x).min(max);
+        if y_upper < x {
+            continue; // no valid y in this row
+        }
+
+        for y in x..=y_upper {
+            // No prod >= best check needed; y_upper already enforces it.
+            let prod = x * y;
+            if is_pal(prod) {
+                best = prod;
+                break; // row minimum found; move to next x
+            }
+        }
+    }
+
+    if best == u64::MAX {
+        None
+    } else {
+        Some((best, collect_factor_pairs(best, min, max)))
+    }
+}
+
+/// Find the largest palindromic product in `[min..max]` and its factor pairs.
+///
+/// Returns `Some((product, pairs))` or `None` if either the range is invalid or
+/// no palindrome exists.
+///
+/// Algorithm:
+/// - `x` descends from `max` to `min`.
+/// - Outer prune: if `x*max <= best`, earlier rows cannot improve `best`.
+/// - For a fixed `x`, only products `> best` matter. That means
+///   `y >= floor(best/x) + 1`. We also require `y >= x` to keep `x <= y`.
+///   Let `y_lower = max(x, floor(best/x)+1)`.
+/// - Iterate `y` from `max` down to `y_lower`; the first palindrome in that row
+///   is the row maximum; update `best` and continue.
+#[inline]
+pub fn largest(min: u64, max: u64) -> Option<(u64, Vec<(u64, u64)>)> {
+    if min > max {
+        return None;
+    }
+
+    let mut best: u64 = 0;
+
+    // x descends
+    for x in (min..=max).rev() {
+        // Outer prune: once x*max <= best, smaller x cannot improve.
+        if x.saturating_mul(max) <= best {
+            break;
+        }
+
+        // y lower bound: only products > best matter; also enforce y >= x.
+        // For x == 0, this row cannot beat any positive best; skip by forcing an empty range.
+        let y_lower = if x > 0 {
+            let floor_best_div_x = best / x;
+            (floor_best_div_x.saturating_add(1)).max(x)
+        } else {
+            max.saturating_add(1)
+        };
+
+        if y_lower > max {
+            continue; // no work for this row
+        }
+
+        for y in (y_lower..=max).rev() {
+            let p = x.saturating_mul(y);
+            if is_pal(p) {
+                best = p; // row maximum found
+                break; // move to next x
+            }
+        }
+    }
+
     if best > 0 || (min == 0 && max == 0) {
         Some((best, collect_factor_pairs(best, min, max)))
     } else {
@@ -117,73 +287,21 @@ pub fn largest(min: u64, max: u64) -> Option<(u64, Vec<(u64, u64)>)> {
     }
 }
 
-/// Return (smallest_palindromic_product, factor_pairs)
-/// where factor_pairs are all (x,y) with min <= x <= y <= max and x * y == product.
-#[inline]
-pub fn smallest(min: u64, max: u64) -> Option<(u64, Vec<(u64, u64)>)> {
-    if min > max {
-        return None;
-    }
+//
+// Simple line-protocol server used by the Criterion harness
+//
 
-    // Start with "infinite" best; we’ll minimize.
-    let mut best = u64::MAX;
-
-    // x: ascend (min -> max)
-    for x in min..=max {
-        // Outer prune: if x * x >= best then later rows (larger x) cannot produce a smaller product.
-        // Guard against overflow (won’t happen for our ranges, but be tidy).
-        let xx = x.saturating_mul(x);
-        if xx >= best {
-            break;
-        }
-
-        // y: ascend (x -> max). As y grows, x * y grows.
-        // Inner prune: if product >= best, the rest of the row can’t help.
-        for y in x..=max {
-            let prod = x * y;
-            if prod >= best {
-                break; // prune the rest of this row
-            }
-            if is_pal(prod) {
-                best = prod;
-                break; // first palindrome in this row is the smallest for this row
-            }
-        }
-    }
-
-    if best == u64::MAX {
-        return None;
-    }
-
-    // Collect factor pairs for `best` (x <= y) within bounds.
-    let mut pairs = Vec::new();
-    if best == 0 {
-        // If 0 is in range, every y in [min..max] forms (0,y).
-        if min == 0 {
-            for y in min..=max {
-                pairs.push((0, y));
-            }
-        }
-    } else {
-        // x ranges from ceil(best/max) up to floor(sqrt(best)), inclusive.
-        let sqrtb = (best as f64).sqrt() as u64;
-        let low = best.div_ceil(max).max(min); // ceil division then clamp
-        let high = sqrtb.min(max);
-        for x in low..=high {
-            if best % x == 0 {
-                let y = best / x;
-                if x <= y && y >= min && y <= max {
-                    pairs.push((x, y));
-                }
-            }
-        }
-    }
-
-    Some((best, pairs))
-}
-
-/// Generic line-protocol server. `do_iters(min,max,iters)` must do the full work
-/// (including factor vector build) and return the final product.
+/// Generic line-protocol server used by the benchmark harness.
+///
+/// Protocol (one command per line):
+/// - `INIT <min> <max>`: set the factor range (must be called first).
+/// - `WARMUP <iters>`: run `iters` iterations without reporting a result.
+/// - `RUN <iters>`: run `iters` iterations and print `OK <product>` with the
+///   last product found.
+/// - `QUIT`: exit.
+///
+/// The `do_iters(min, max, iters)` closure must do the full work (including
+/// factor pair building) and return the final product as `Option<u64>`.
 pub fn run_server<F>(mut do_iters: F)
 where
     F: FnMut(u64, u64, u64) -> Option<u64>,
@@ -244,7 +362,6 @@ where
 mod tests {
     use super::*;
 
-    /// Normalize factors: ensure each pair is (min,max), then sort the whole list.
     fn norm(mut v: Vec<(u64, u64)>) -> Vec<(u64, u64)> {
         v.sort_unstable();
         v

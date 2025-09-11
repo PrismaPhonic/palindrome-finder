@@ -59,7 +59,7 @@ Build the Rust solution in release mode, then copy the binaries to =target-bin/=
 
 #+BEGIN_SRC shell
 cd rust-palindrome
-cargo build --release
+RUSTFLAGS="-C target-cpu=native" cargo build --release
 
 cp target/release/palprod-rust-smallest ../target-bin/
 cp target/release/palprod-rust-largest  ../target-bin/
@@ -90,8 +90,7 @@ The Criterion project expects all executables to already be present in =target-b
 
 #+BEGIN_SRC shell
 cd palindrome-benchmark
-cargo build --release
-cargo bench
+RUSTFLAGS="-C target-cpu=native" cargo bench
 #+END_SRC
 
 Criterion will run the configured scenarios and report timing distributions and
@@ -103,12 +102,12 @@ Latest average times per iteration:
 
 | Implementation |    Range | Task     | Time      |
 |----------------+----------+----------+-----------|
-| fast (Lisp)    | 100..999 | largest  | 7.7364 µs |
-| fast (Lisp)    | 910..999 | smallest | 2.3080 µs |
-| comm (Lisp)    | 100..999 | largest  | 6.9058 ms |
-| comm (Lisp)    | 910..999 | smallest | 2.2301 ms |
-| Rust           | 100..999 | largest  | 10.403 µs |
-| Rust           | 910..999 | smallest | 2.3443 µs |
+| fast (Lisp)    | 100..999 | largest  | 7.5584 µs |
+| fast (Lisp)    | 910..999 | smallest | 2.2594 µs |
+| comm (Lisp)    | 100..999 | largest  | 6.6962 ms |
+| comm (Lisp)    | 910..999 | smallest | 2.2065 ms |
+| Rust           | 100..999 | largest  | 7.3029 µs |
+| Rust           | 910..999 | smallest | 1.6659 µs  |
 
 * Notes
 - Both languages use a numeric half-reversal palindrome check (no strings).
