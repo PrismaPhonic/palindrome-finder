@@ -1,0 +1,11 @@
+[package]
+name = "palindrome-benchmark"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+criterion = "0.7"
+
+[[bench]]
+name = "pal_bench"
+harness = false

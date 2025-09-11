@@ -1,0 +1,21 @@
+[package]
+name = "rust-palindrome"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "palprod_rust"
+path = "src/lib.rs"
+
+[[bin]]
+name = "palprod-rust-largest"
+path = "src/bin/palprod-rust-largest.rs"
+
+[[bin]]
+name = "palprod-rust-smallest"
+path = "src/bin/palprod-rust-smallest.rs"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+opt-level = 3
