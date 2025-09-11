@@ -2,6 +2,10 @@
 .idea
 *.log
 tmp/
-/target-bin/*
-/target
+target-bin/palprod-fast-smallest-inner
+target-bin/palprod-comm-smallest-inner
+target-bin/palprod-fast-largest-inner
+target-bin/palprod-comm-largest-inner
+target-bin/palprod-rust-largest
+target-bin/palprod-rust-smallest
 **/target
