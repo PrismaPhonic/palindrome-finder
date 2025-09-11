@@ -6,7 +6,7 @@ This project compares different implementations of the "palindromic products"
 coding challenge, originally from Exercism (https://exercism.org).
 
 ** The problem
-Given a range of integers [MIN..MAX], find:
+Given a range of integers [min, max], find:
 - the smallest palindromic product of two factors in that range
 - the largest palindromic product of two factors in that range
 
@@ -73,7 +73,19 @@ After these steps, =target-bin/= should contain six executables:
 - palprod-rust-smallest
 - palprod-rust-largest
 
+* Benchmark harness design
+
+To ensure fair comparisons, we benchmark by shelling out to fully compiled
+executables. This avoids bias from interpreter startup or compilation latency.
+
+Criterion (in =palindrome-benchmark/=) runs each binary via a small harness that
+acts like a "server": it performs warmups, then repeated timed runs. By
+amortizing the process startup cost, the measurements reflect only the algorithm
+runtime, not external overhead. This design makes cross-language benchmarking
+much more reliable.
+
 * Run the Criterion suite
+
 The Criterion project expects all executables to already be present in =target-bin/=.
 
 #+BEGIN_SRC shell
@@ -84,6 +96,19 @@ cargo bench
 
 Criterion will run the configured scenarios and report timing distributions and
 comparisons.
+
+* Current results
+
+Latest average times per iteration:
+
+| Implementation |    Range | Task     | Time      |
+|----------------+----------+----------+-----------|
+| fast (Lisp)    | 100..999 | largest  | 7.7364 µs |
+| fast (Lisp)    | 910..999 | smallest | 2.3080 µs |
+| comm (Lisp)    | 100..999 | largest  | 6.9058 ms |
+| comm (Lisp)    | 910..999 | smallest | 2.2301 ms |
+| Rust           | 100..999 | largest  | 10.403 µs |
+| Rust           | 910..999 | smallest | 2.3443 µs |
 
 * Notes
 - Both languages use a numeric half-reversal palindrome check (no strings).
