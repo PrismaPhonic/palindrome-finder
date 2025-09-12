@@ -202,8 +202,7 @@ pub fn smallest(min: u64, max: u64) -> Option<(u64, Vec<(u64, u64)>)> {
     let mut best = u64::MAX;
 
     for x in min..=max {
-        let xx = x.saturating_mul(x);
-        if xx >= best {
+        if x * x >= best {
             break; // outer prune
         }
 
@@ -215,7 +214,7 @@ pub fn smallest(min: u64, max: u64) -> Option<(u64, Vec<(u64, u64)>)> {
 
         for y in x..=y_upper {
             // No prod >= best check needed; y_upper already enforces it.
-            let prod = x * y;
+            let prod = x * y; // garaunteed < best via y_upper.
             if is_pal(prod) {
                 best = prod;
                 break; // row minimum found; move to next x
@@ -254,25 +253,23 @@ pub fn largest(min: u64, max: u64) -> Option<(u64, Vec<(u64, u64)>)> {
     // x descends
     for x in (min..=max).rev() {
         // Outer prune: once x*max <= best, smaller x cannot improve.
-        if x.saturating_mul(max) <= best {
+        if x * max <= best {
             break;
         }
 
+        if x == 0 {
+            continue; // row cannot beat best > 0
+        }
+
         // y lower bound: only products > best matter; also enforce y >= x.
-        // For x == 0, this row cannot beat any positive best; skip by forcing an empty range.
-        let y_lower = if x > 0 {
-            let floor_best_div_x = best / x;
-            (floor_best_div_x.saturating_add(1)).max(x)
-        } else {
-            max.saturating_add(1)
-        };
+        let y_lower = ((best / x) + 1).max(x);
 
         if y_lower > max {
             continue; // no work for this row
         }
 
         for y in (y_lower..=max).rev() {
-            let p = x.saturating_mul(y);
+            let p = x * y; // garaunteed > best by bounds of y_lower
             if is_pal(p) {
                 best = p; // row maximum found
                 break; // move to next x
