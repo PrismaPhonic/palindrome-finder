@@ -59,6 +59,8 @@
 use std::io::{BufRead, BufReader, Write};
 use std::str::FromStr;
 
+use arrayvec::ArrayVec;
+
 //
 // Palindrome helpers
 //
@@ -139,12 +141,16 @@ pub fn is_pal(n: u64) -> bool {
 
 /// When `product == 0` and `0` is in range, valid ordered pairs are `(0, y)`
 /// for all `y in [min..max]`. Otherwise the set is empty.
+///
+/// The return is somewhat arbitrary. It's possible that if min is 0, and max is huge, that the array vec will need to be larger.
+/// In practice this is a toy problem and it's unlikely anyone would input 0 as a minimum anyways, so this is a somewhat silly edgecase.
+/// We are naively assuming that if someone puts a min of 0, it's to test this edge case, and they probably won't pick a max > 10.
 #[inline]
-fn collect_zero_factor_pairs(min: u64, max: u64) -> Vec<(u64, u64)> {
+fn collect_zero_factor_pairs(min: u64, max: u64) -> ArrayVec<(u64, u64), 12> {
     if min == 0 {
         (min..=max).map(|y| (0, y)).collect()
     } else {
-        Vec::new()
+        ArrayVec::new_const()
     }
 }
 
@@ -154,7 +160,7 @@ fn collect_zero_factor_pairs(min: u64, max: u64) -> Vec<(u64, u64)> {
 /// Uses a tight divisor window:
 ///   x in [ ceil(product / max) .. min(max, isqrt(product)) ]
 #[inline]
-pub fn collect_factor_pairs(product: u64, min: u64, max: u64) -> Vec<(u64, u64)> {
+pub fn collect_factor_pairs(product: u64, min: u64, max: u64) -> ArrayVec<(u64, u64), 12> {
     if product == 0 {
         return collect_zero_factor_pairs(min, max);
     }
@@ -163,14 +169,17 @@ pub fn collect_factor_pairs(product: u64, min: u64, max: u64) -> Vec<(u64, u64)>
     let low = product.div_ceil(max).max(min);
     let high = product.isqrt().min(max);
 
-    let mut out = Vec::new();
+    // We probably only need a 3 sized ArrayVec here (in practice, other than
+    // the edge case of min == 0, I've only ever seen two factor pairs for a
+    // single palindrome product). We set 12 because we need it to match the type from
+    // the zero edge case, which ultimately could be infinite, but in practice
+    // won't be.
+    let mut out: ArrayVec<(u64, u64), 12> = ArrayVec::new_const();
     for x in low..=high {
         if product % x == 0 {
-            let y = product / x;
             // y is automatically >= x because x <= isqrt(product)
-            if y >= min && y <= max {
-                out.push((x, y));
-            }
+            let y = product / x;
+            out.push((x, y));
         }
     }
 
@@ -194,7 +203,7 @@ pub fn collect_factor_pairs(product: u64, min: u64, max: u64) -> Vec<(u64, u64)>
 /// - Iterate `y` from `x` to `y_upper`; the first palindrome in that row is
 ///   the row minimum; update `best` and continue.
 #[inline]
-pub fn smallest(min: u64, max: u64) -> Option<(u64, Vec<(u64, u64)>)> {
+pub fn smallest(min: u64, max: u64) -> Option<(u64, ArrayVec<(u64, u64), 12>)> {
     if min > max {
         return None;
     }
@@ -243,7 +252,7 @@ pub fn smallest(min: u64, max: u64) -> Option<(u64, Vec<(u64, u64)>)> {
 /// - Iterate `y` from `max` down to `y_lower`; the first palindrome in that row
 ///   is the row maximum; update `best` and continue.
 #[inline]
-pub fn largest(min: u64, max: u64) -> Option<(u64, Vec<(u64, u64)>)> {
+pub fn largest(min: u64, max: u64) -> Option<(u64, ArrayVec<(u64, u64), 12>)> {
     if min > max {
         return None;
     }
@@ -359,13 +368,14 @@ where
 mod tests {
     use super::*;
 
-    fn norm(mut v: Vec<(u64, u64)>) -> Vec<(u64, u64)> {
-        v.sort_unstable();
-        v
+    fn norm(v: impl IntoIterator<Item = (u64, u64)>) -> Vec<(u64, u64)> {
+        let mut out: Vec<(u64, u64)> = v.into_iter().collect();
+        out.sort_unstable();
+        out
     }
 
     fn assert_some_eq(
-        got: Option<(u64, Vec<(u64, u64)>)>,
+        got: Option<(u64, ArrayVec<(u64, u64), 12>)>,
         expect_p: u64,
         expect_factors: &[(u64, u64)],
     ) {

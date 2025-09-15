@@ -43,9 +43,18 @@
 (declaim
  (ftype (function (fixnum) boolean) palindromep)
  (ftype (function (fixnum) boolean) even-digit-count-p)
- (ftype (function (fixnum fixnum fixnum (function (fixnum fixnum) *)) *)
-        do-factor-pairs)
- (ftype (function (fixnum fixnum fixnum) fixnum) factor-pair-count)
+ (ftype (function ((simple-array (signed-byte 32) (*)) fixnum)
+                  (simple-array (signed-byte 32) (*)))
+        finalize-factor-buffer)
+ (ftype (function (fixnum fixnum)
+                  (simple-array (signed-byte 32) (*)))
+        collect-zero-factor-pairs)
+ (ftype (function (fixnum fixnum fixnum)
+                  (simple-array (signed-byte 32) (*)))
+        collect-positive-factor-pairs)
+ (ftype (function (fixnum fixnum fixnum)
+                  (simple-array (signed-byte 32) (*)))
+        build-factor-pair-vector)
  (ftype (function (fixnum fixnum)
                   (values (or null fixnum)
                           (or null (simple-array (signed-byte 32) (*)))))
@@ -56,9 +65,11 @@
         pairs-vector->list))
 
 (declaim (inline palindromep even-digit-count-p
-                 do-factor-pairs factor-pair-count
-                 %build-zero-factor-vector %build-positive-factor-vector
-                 build-factor-pair-vector pairs-vector->list
+                 build-factor-pair-vector
+                 finalize-factor-buffer
+                 collect-zero-factor-pairs
+                 collect-positive-factor-pairs
+                 pairs-vector->list
                  smallest-inner largest-inner))
 
 ;; ------------------------------------------------------------------
@@ -126,89 +137,71 @@
         (eql m (the fixnum (truncate rev 10))))))
 
 ;; ------------------------------------------------------------------
-;; Zero-allocation visitor and counter over factor pairs (tight divisor window)
-
-(defun do-factor-pairs (product min max fn)
-  "Call FN with (x y) for each factor pair x*y=PRODUCT, MIN<=x<=y<=MAX.
-   Zero allocation: FN consumes pairs; nothing is returned.
-   Tight window: x in [ceil(PRODUCT/MAX), min(MAX, floor(sqrt(PRODUCT)))]."
-  (declare (type fixnum product min max)
-           (type (function (fixnum fixnum) *) fn))
-  (cond
-    ((zerop product)
-     ;; (0,y) for all y in [min..max] if 0 is in range
-     (when (and (<= min 0) (<= 0 max))
-       (loop for y of-type fixnum from min to max do
-         (funcall fn 0 y))))
-    (t
-     (let* ((sqrtp (the fixnum (isqrt product)))
-            (low   (the fixnum (max min (truncate (+ product max -1) max))))
-            (high  (the fixnum (min max sqrtp))))
-       (declare (type fixnum sqrtp low high))
-       (loop for x of-type fixnum from low to high
-             when (zerop (mod product x)) do
-               (let ((y (the fixnum (truncate product x))))
-                 (declare (type fixnum y))
-                 (funcall fn x y)))))))
-
-(defun factor-pair-count (product min max)
-  "Count factor pairs (x<=y) for PRODUCT in [MIN..MAX] without allocating."
-  (declare (type fixnum product min max))
-  (let ((count 0))
-    (declare (type fixnum count))
-    (do-factor-pairs product min max
-      (lambda (x y) (declare (ignore x y)) (incf count)))
-    count))
-
-;; ------------------------------------------------------------------
 ;; Allocation-tight builders for the flat factor-pair vector (unboxed)
 
-(declaim (inline %build-zero-factor-vector %build-positive-factor-vector))
+(defun collect-zero-factor-pairs (min max)
+  "return all pairs (0,y) for y in [min..max] as a flat sb32 simple-array
+   [x0 y0 x1 y1 ...]. assumes min = 0."
+  (declare (optimize (speed 3) (safety 0) (debug 0))
+           (type fixnum min max))
+  (let* ((pairs (the fixnum (1+ (- max min))))
+         (n     (the fixnum (* 2 pairs)))
+         (out   (make-array n :element-type '(signed-byte 32))))
+    (declare (type fixnum pairs n)
+             (type (simple-array (signed-byte 32) (*)) out))
+    (let ((i 0))
+      (declare (type fixnum i))
+      (loop for y of-type fixnum from min to max do
+        (setf (aref out i) 0
+              (aref out (the fixnum (1+ i))) y)
+        (incf i 2)))
+    out))
 
-(defun %build-zero-factor-vector (min max)
-  "Return flat vector [0 min, 0 (min+1), ..., 0 max] if 0 in [min..max], else empty."
-  (declare (type fixnum min max))
-  (if (and (<= min 0) (<= 0 max))
-      (let* ((pair-count  (the fixnum (1+ (- max min))))
-             (total-slots (the fixnum (* 2 pair-count)))
-             (out         (make-array total-slots :element-type '(signed-byte 32))))
-        (declare (type fixnum pair-count total-slots)
-                 (type (simple-array (signed-byte 32) (*)) out))
-        (let ((write-index 0))
-          (declare (type fixnum write-index))
-          (loop for y of-type fixnum from min to max do
-            (setf (aref out write-index) 0
-                  (aref out (the fixnum (1+ write-index))) y)
-            (incf write-index 2))
-          out))
-      (make-array 0 :element-type '(signed-byte 32))))
+(defun finalize-factor-buffer (buffer count)
+  "Copy the first count entries from buffer (sb32) to a right-sized sb32 result.
 
-(defun %build-positive-factor-vector (product min max)
-  "Return flat vector [x0 y0 x1 y1 ...] for PRODUCT>0; empty if none."
-  (declare (type fixnum product min max))
-  (let* ((pair-count (factor-pair-count product min max)))
-    (declare (type fixnum pair-count))
-    (if (zerop pair-count)
-        (make-array 0 :element-type '(signed-byte 32))
-        (let* ((total-slots (the fixnum (* 2 pair-count)))
-               (out         (make-array total-slots :element-type '(signed-byte 32))))
-          (declare (type fixnum total-slots)
-                   (type (simple-array (signed-byte 32) (*)) out))
-          (let ((write-index 0))
-            (declare (type fixnum write-index))
-            (do-factor-pairs product min max
-              (lambda (x y)
-                (setf (aref out write-index) x
-                      (aref out (the fixnum (1+ write-index))) y)
-                (incf write-index 2)))
-            out)))))
+   This is used so we can create factor pairs with stack allocated arrays, and
+   avoid   pointer chasing. We finalize into a correctly sized output array with
+   this helper"
+  (declare (optimize (speed 3) (safety 0) (debug 0))
+           (type (simple-array (signed-byte 32) (*)) buffer)
+           (type fixnum count)
+           (dynamic-extent buffer))
+  (let ((out (make-array count :element-type '(signed-byte 32))))
+    (declare (type (simple-array (signed-byte 32) (*)) out))
+    (loop for i of-type fixnum from 0 below count do
+      (setf (aref out i) (aref buffer i)))
+    out))
+
+(defun collect-positive-factor-pairs (product min max)
+  "Return flat vector [x0 y0 x1 y1 ...] for product > 0; empty if none."
+  (declare (optimize (speed 3) (safety 0) (debug 0))
+           (type fixnum product min max))
+  (let* ((sqrtp (the fixnum (isqrt product)))
+         (low   (the fixnum (max min (truncate (+ product max -1) max))))
+         (high  (the fixnum (min max sqrtp)))
+         ;; small fixed buffer; I've never see more than 3 pairs other than the
+         ;; case of min == zero, which we already special case, so this should
+         ;; be more than enough.
+         (buff (make-array 6 :element-type '(signed-byte 32)))
+         (count 0))
+    (declare (type fixnum sqrtp low high count)
+             (type (simple-array (signed-byte 32) (*)) buff)
+             (dynamic-extent buff))
+    (loop for x of-type fixnum from low to high do
+      (when (zerop (mod product x))
+        (let ((y (the fixnum (truncate product x))))
+          (setf (aref buff count) x
+                (aref buff (the fixnum (1+ count))) y)
+          (incf count 2))))
+    (finalize-factor-buffer buff count)))
 
 (defun build-factor-pair-vector (product min max)
   "Return a flat vector [x0 y0 x1 y1 ...] (unboxed 32-bit ints)."
   (declare (type fixnum product min max))
   (if (zerop product)
-      (%build-zero-factor-vector min max)
-      (%build-positive-factor-vector product min max)))
+      (collect-zero-factor-pairs min max)
+      (collect-positive-factor-pairs product min max)))
 
 (defun pairs-vector->list (vec)
   "Convert flat vector [x0 y0 x1 y1 ...] to ((x y) ...)."
@@ -217,7 +210,7 @@
       nil
       (let ((out '()))
         (declare (type list out))
-        (loop for i fixnum from 0 below (length vec) by 2 do
+        (loop for i of-type fixnum from 0 below (length vec) by 2 do
           (push (list (aref vec i)
                       (aref vec (the fixnum (1+ i))))
                 out))

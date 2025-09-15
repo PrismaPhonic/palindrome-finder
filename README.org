@@ -102,12 +102,12 @@ Latest average times per iteration:
 
 | Implementation |    Range | Task     | Time      |
 |----------------+----------+----------+-----------|
-| fast (Lisp)    | 100..999 | largest  | 7.5584 µs |
-| fast (Lisp)    | 910..999 | smallest | 2.2594 µs |
+| Rust           | 100..999 | largest  | 6.7834 µs |
+| Rust           | 910..999 | smallest | 1.8476 µs |
+| fast (Lisp)    | 100..999 | largest  | 7.5308 µs |
+| fast (Lisp)    | 910..999 | smallest | 2.2396 µs |
 | comm (Lisp)    | 100..999 | largest  | 6.6962 ms |
 | comm (Lisp)    | 910..999 | smallest | 2.2065 ms |
-| Rust           | 100..999 | largest  | 6.9778 µs |
-| Rust           | 910..999 | smallest | 1.6409 µs |
 
 * Notes
 - Both languages use a numeric half-reversal palindrome check (no strings).
