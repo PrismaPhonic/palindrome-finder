@@ -17,17 +17,18 @@ Each function returns:
 2. The list of factor pairs that generate it
 
 ** The goal
-We implement and benchmark solutions in both Common Lisp (SBCL) and Rust.
+We implement and benchmark solutions in Common Lisp (SBCL), Rust, and Go.
 The objective is to measure performance trade-offs across languages and
 algorithmic optimizations.
 
 * Project layout
 - =lisp/= Common Lisp implementations and build scripts
 - =rust-palindrome/= Rust solution binaries and library
+- =go-palindrome/= Go solution binaries and library
 - =palindrome-benchmark/= Criterion harness that drives all binaries
 - =target-bin/= where all compiled executables are collected
 
-* Build all binaries (Lisp then Rust)
+* Build all binaries (Lisp, Rust, then Go)
 
 ** Common Lisp (SBCL)
 From the =lisp/= directory, run each build script with SBCL like this:
@@ -65,13 +66,23 @@ cp target/release/palprod-rust-smallest ../target-bin/
 cp target/release/palprod-rust-largest  ../target-bin/
 #+END_SRC
 
-After these steps, =target-bin/= should contain six executables:
+** Go
+Build the Go solution and copy the binaries to =target-bin/=:
+
+#+BEGIN_SRC shell
+cd go-palindrome
+./build.sh
+#+END_SRC
+
+After these steps, =target-bin/= should contain eight executables:
 - palprod-fast-smallest-inner
 - palprod-fast-largest-inner
 - palprod-comm-smallest-inner
 - palprod-comm-largest-inner
 - palprod-rust-smallest
 - palprod-rust-largest
+- palprod-go-smallest
+- palprod-go-largest
 
 * Benchmark harness design
 
@@ -106,6 +117,8 @@ Latest average times per iteration:
 | Rust           | 910..999 | smallest | 1.8526 µs |
 | fast (Lisp)    | 100..999 | largest  | 7.5308 µs |
 | fast (Lisp)    | 910..999 | smallest | 2.2396 µs |
+| Golang         | 100..999 | largest  | 9.5113 µs |
+| Golang         | 910..999 | smallest | 2.3737 µs |
 | comm (Lisp)    | 100..999 | largest  | 6.6962 ms |
 | comm (Lisp)    | 910..999 | smallest | 2.2065 ms |
 

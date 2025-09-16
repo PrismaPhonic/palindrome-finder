@@ -64,7 +64,7 @@ fn bench_servered(c: &mut Criterion, name: &str, bin: &str, min: i32, max: i32) 
     r.init(min, max);
 
     // optional short pre-prime (page cache / JITs); not measured
-    r.warmup(100);
+    r.warmup(500_000);
 
     c.bench_function(name, |b| {
         b.iter_custom(|iters| {
@@ -82,6 +82,8 @@ pub fn benches(c: &mut Criterion) {
     let comm_sm = "../target-bin/palprod-comm-smallest-inner";
     let rust_lg = "../target-bin/palprod-rust-largest";
     let rust_sm = "../target-bin/palprod-rust-smallest";
+    let go_lg = "../target-bin/palprod-go-largest";
+    let go_sm = "../target-bin/palprod-go-smallest";
 
     bench_servered(c, "FAST   largest 100..999", fast_lg, 100, 999);
     bench_servered(c, "FAST   smallest 910..999", fast_sm, 910, 999);
@@ -91,6 +93,9 @@ pub fn benches(c: &mut Criterion) {
 
     bench_servered(c, "RUST   largest 100..999", rust_lg, 100, 999);
     bench_servered(c, "RUST   smallest 910..999", rust_sm, 910, 999);
+
+    bench_servered(c, "GO     largest 100..999", go_lg, 100, 999);
+    bench_servered(c, "GO     smallest 910..999", go_sm, 910, 999);
 }
 
 criterion_group! {
