@@ -17,14 +17,14 @@
 ;;;; - Types and codegen (SBCL-friendly):
 ;;;;   - fixnum declarations and (the fixnum ...) in hot code so SBCL emits
 ;;;;     inline fixnum arithmetic (no generic ops).
-;;;;   - factor vectors use '(signed-byte 32) (unboxed) for better locality.
+;;;;   - factor vectors use '(signed-byte 64) (unboxed) for better locality.
 ;;;; - No SIMD or stack allocation of returned data:
 ;;;;   - the core is div/mod plus branching; SIMD will not help
 ;;;;   - returned vectors escape, so they must live on the heap; dynamic-extent is
 ;;;;     only for non-escaping temporaries.
 ;;;; Highlights
 ;;;; - half-reversal palindrome check (divides by 10 only; minimal work)
-;;;; - unboxed factor vectors '(signed-byte 32) for tighter memory
+;;;; - unboxed factor vectors '(signed-byte 64) for tighter memory
 ;;;; - guards that avoid expensive palindrome calls:
 ;;;;     - skip positive products ending in 0 (cannot be palindromes)
 ;;;;     - for even-digit products, if not divisible by 11 then skip
@@ -43,25 +43,25 @@
 (declaim
  (ftype (function (fixnum) boolean) palindromep)
  (ftype (function (fixnum) boolean) even-digit-count-p)
- (ftype (function ((simple-array (signed-byte 32) (*)) fixnum)
-                  (simple-array (signed-byte 32) (*)))
+ (ftype (function ((simple-array (signed-byte 64) (*)) fixnum)
+                  (simple-array (signed-byte 64) (*)))
         finalize-factor-buffer)
  (ftype (function (fixnum fixnum)
-                  (simple-array (signed-byte 32) (*)))
+                  (simple-array (signed-byte 64) (*)))
         collect-zero-factor-pairs)
  (ftype (function (fixnum fixnum fixnum)
-                  (simple-array (signed-byte 32) (*)))
+                  (simple-array (signed-byte 64) (*)))
         collect-positive-factor-pairs)
  (ftype (function (fixnum fixnum fixnum)
-                  (simple-array (signed-byte 32) (*)))
+                  (simple-array (signed-byte 64) (*)))
         build-factor-pair-vector)
  (ftype (function (fixnum fixnum)
                   (values (or null fixnum)
-                          (or null (simple-array (signed-byte 32) (*)))))
+                          (or null (simple-array (signed-byte 64) (*)))))
         smallest-inner largest-inner)
  (ftype (function (fixnum fixnum) (values (or null fixnum) list))
         smallest largest)
- (ftype (function ((or null (simple-array (signed-byte 32) (*)))) list)
+ (ftype (function ((or null (simple-array (signed-byte 64) (*)))) list)
         pairs-vector->list))
 
 (declaim (inline palindromep even-digit-count-p
@@ -146,9 +146,9 @@
            (type fixnum min max))
   (let* ((pairs (1+ (- max min)))
          (n     (* 2 pairs))
-         (out   (make-array n :element-type '(signed-byte 32))))
+         (out   (make-array n :element-type '(signed-byte 64))))
     (declare (type fixnum pairs n)
-             (type (simple-array (signed-byte 32) (*)) out))
+             (type (simple-array (signed-byte 64) (*)) out))
     (let ((i 0))
       (declare (type fixnum i))
       (loop for y of-type fixnum from min to max do
@@ -164,11 +164,11 @@
    avoid   pointer chasing. We finalize into a correctly sized output array with
    this helper"
   (declare (optimize (speed 3) (safety 0) (debug 0))
-           (type (simple-array (signed-byte 32) (*)) buffer)
+           (type (simple-array (signed-byte 64) (*)) buffer)
            (type fixnum count)
            (dynamic-extent buffer))
-  (let ((out (make-array count :element-type '(signed-byte 32))))
-    (declare (type (simple-array (signed-byte 32) (*)) out))
+  (let ((out (make-array count :element-type '(signed-byte 64))))
+    (declare (type (simple-array (signed-byte 64) (*)) out))
     (loop for i of-type fixnum from 0 below count do
       (setf (aref out i) (aref buffer i)))
     out))
@@ -177,16 +177,16 @@
   "Return flat vector [x0 y0 x1 y1 ...] for product > 0; empty if none."
   (declare (optimize (speed 3) (safety 0) (debug 0))
            (type fixnum product min max))
-  (let* ((sqrtp (isqrt product))
+  (let* ((sqrtp (the fixnum (isqrt product)))
          (low   (max min (truncate (+ product max -1) max)))
          (high  (min max sqrtp))
          ;; small fixed buffer; I've never see more than 3 pairs other than the
          ;; case of min == zero, which we already special case, so this should
          ;; be more than enough.
-         (buff (make-array 6 :element-type '(signed-byte 32)))
+         (buff (make-array 6 :element-type '(signed-byte 64)))
          (count 0))
     (declare (type fixnum sqrtp low high count)
-             (type (simple-array (signed-byte 32) (*)) buff)
+             (type (simple-array (signed-byte 64) (*)) buff)
              (dynamic-extent buff))
     (loop for x of-type fixnum from low to high do
       (when (zerop (mod product x))
@@ -205,14 +205,14 @@
 
 (defun pairs-vector->list (vec)
   "Convert flat vector [x0 y0 x1 y1 ...] to ((x y) ...)."
-  (declare (type (or null (simple-array (signed-byte 32) (*))) vec))
+  (declare (type (or null (simple-array (signed-byte 64) (*))) vec))
   (if (or (null vec) (zerop (length vec)))
       nil
       (let ((out '()))
         (declare (type list out))
         (loop for i of-type fixnum from 0 below (length vec) by 2 do
-          (push (list (aref vec i)
-                      (aref vec (1+ i)))
+          (push (list (the fixnum (aref vec i))
+                      (the fixnum (aref vec (1+ i))))
                 out))
         (nreverse out))))
 
@@ -226,7 +226,7 @@
 (defun smallest-inner (min max)
   "Return two values:
    1) the smallest palindromic product of two factors in [min, max], or NIL
-   2) a flat vector [x0 y0 x1 y1 ...] of factor pairs (unboxed 32-bit ints)
+   2) a flat vector [x0 y0 x1 y1 ...] of factor pairs (unboxed 64-bit ints)
 
 Algorithm (ascending x, ascending y with a tight y upper bound):
 - We maintain best, the smallest palindrome found so far (starts at +inf).
@@ -277,7 +277,7 @@ This reduces calls to palindromep by shrinking each row as best improves."
 (defun largest-inner (min max)
   "Return two values:
    1) the largest palindromic product of two factors in [min, max], or NIL
-   2) a flat vector [x0 y0 x1 y1 ...] of factor pairs (unboxed 32-bit ints)
+   2) a flat vector [x0 y0 x1 y1 ...] of factor pairs (unboxed 64-bit ints)
 
 Algorithm (descending x, descending y with a tight y lower bound):
 - We maintain best, the largest palindrome found so far (starts at -1).
