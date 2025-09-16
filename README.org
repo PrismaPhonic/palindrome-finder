@@ -102,8 +102,8 @@ Latest average times per iteration:
 
 | Implementation |    Range | Task     | Time      |
 |----------------+----------+----------+-----------|
-| Rust           | 100..999 | largest  | 6.7834 µs |
-| Rust           | 910..999 | smallest | 1.8476 µs |
+| Rust           | 100..999 | largest  | 5.9766 µs |
+| Rust           | 910..999 | smallest | 1.8526 µs |
 | fast (Lisp)    | 100..999 | largest  | 7.5308 µs |
 | fast (Lisp)    | 910..999 | smallest | 2.2396 µs |
 | comm (Lisp)    | 100..999 | largest  | 6.6962 ms |
