@@ -16,10 +16,13 @@ name = "palprod-rust-smallest"
 path = "src/bin/palprod-rust-smallest.rs"
 
 [profile.release]
-lto = "thin"
+lto = "fat"  # Use fat LTO for better cross-module optimization
 codegen-units = 1
 opt-level = 3
 panic = "abort"
+overflow-checks = false
+debug = false
+strip = true
 
 [dependencies]
 arrayvec = "0.7.6"
