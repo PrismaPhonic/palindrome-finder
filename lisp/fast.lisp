@@ -144,8 +144,8 @@
    [x0 y0 x1 y1 ...]. assumes min = 0."
   (declare (optimize (speed 3) (safety 0) (debug 0))
            (type fixnum min max))
-  (let* ((pairs (the fixnum (1+ (- max min))))
-         (n     (the fixnum (* 2 pairs)))
+  (let* ((pairs (1+ (- max min)))
+         (n     (* 2 pairs))
          (out   (make-array n :element-type '(signed-byte 32))))
     (declare (type fixnum pairs n)
              (type (simple-array (signed-byte 32) (*)) out))
@@ -153,7 +153,7 @@
       (declare (type fixnum i))
       (loop for y of-type fixnum from min to max do
         (setf (aref out i) 0
-              (aref out (the fixnum (1+ i))) y)
+              (aref out (1+ i)) y)
         (incf i 2)))
     out))
 
@@ -177,9 +177,9 @@
   "Return flat vector [x0 y0 x1 y1 ...] for product > 0; empty if none."
   (declare (optimize (speed 3) (safety 0) (debug 0))
            (type fixnum product min max))
-  (let* ((sqrtp (the fixnum (isqrt product)))
-         (low   (the fixnum (max min (truncate (+ product max -1) max))))
-         (high  (the fixnum (min max sqrtp)))
+  (let* ((sqrtp (isqrt product))
+         (low   (max min (truncate (+ product max -1) max)))
+         (high  (min max sqrtp))
          ;; small fixed buffer; I've never see more than 3 pairs other than the
          ;; case of min == zero, which we already special case, so this should
          ;; be more than enough.
@@ -190,9 +190,9 @@
              (dynamic-extent buff))
     (loop for x of-type fixnum from low to high do
       (when (zerop (mod product x))
-        (let ((y (the fixnum (truncate product x))))
+        (let ((y (truncate product x)))
           (setf (aref buff count) x
-                (aref buff (the fixnum (1+ count))) y)
+                (aref buff (1+ count)) y)
           (incf count 2))))
     (finalize-factor-buffer buff count)))
 
@@ -212,7 +212,7 @@
         (declare (type list out))
         (loop for i of-type fixnum from 0 below (length vec) by 2 do
           (push (list (aref vec i)
-                      (aref vec (the fixnum (1+ i))))
+                      (aref vec (1+ i)))
                 out))
         (nreverse out))))
 
@@ -243,7 +243,7 @@ Algorithm (ascending x, ascending y with a tight y upper bound):
 
 This reduces calls to palindromep by shrinking each row as best improves."
   (declare (type fixnum min max))
-  (let ((best (the fixnum most-positive-fixnum)))
+  (let ((best most-positive-fixnum))
     (declare (type fixnum best))
     (block search
       ;; x ascends
@@ -253,8 +253,7 @@ This reduces calls to palindromep by shrinking each row as best improves."
           (return-from search))
         ;; compute tight y upper bound from current best
         (let* ((y-upper
-                 (the fixnum
-                      (min max (truncate (the fixnum (1- best)) x))))) ; floor((best-1)/x)
+                 (min max (truncate (1- best) x)))) ; floor((best-1)/x)
           (when (< y-upper x)
             (return)) ; no possible y in this row
           (block row
@@ -262,7 +261,7 @@ This reduces calls to palindromep by shrinking each row as best improves."
             (loop for y of-type fixnum from x to y-upper
                   for product of-type fixnum
                     = #+sbcl (sb-ext:truly-the fixnum (* x y))
-                  #-sbcl (the fixnum (* x y)) do
+                  #-sbcl (* x y) do
                     (when (palindromep product)
                       (setf best product)
                       (return-from row)))))))
@@ -295,7 +294,7 @@ Algorithm (descending x, descending y with a tight y lower bound):
 
 This mirrors the smallest optimization and further reduces palindromep calls."
   (declare (type fixnum min max))
-  (let ((best (the fixnum -1)))
+  (let ((best -1))
     (declare (type fixnum best))
     (block search
       ;; x descends
@@ -305,8 +304,7 @@ This mirrors the smallest optimization and further reduces palindromep calls."
           (return-from search))
         ;; compute tight y lower bound from current best
         (let* ((y-lower
-                 (the fixnum
-                      (max x (the fixnum (1+ (truncate (the fixnum (max best 0)) x)))))))
+                 (max x (1+ (truncate (max best 0) x)))))
           (when (> y-lower max)
             (return)) ; no possible y in this row
           (block row
@@ -314,7 +312,7 @@ This mirrors the smallest optimization and further reduces palindromep calls."
             (loop for y of-type fixnum from max downto y-lower
                   for product of-type fixnum
                     = #+sbcl (sb-ext:truly-the fixnum (* x y))
-                  #-sbcl (the fixnum (* x y)) do
+                  #-sbcl (* x y) do
                     (when (palindromep product)
                       (setf best product)
                       (return-from row)))))))
