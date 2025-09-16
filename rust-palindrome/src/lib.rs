@@ -159,25 +159,30 @@ pub fn is_pal(n: u64) -> bool {
 /// When `product == 0` and `0` is in range, valid ordered pairs are `(0, y)`
 /// for all `y in [min..max]`. Otherwise the set is empty.
 ///
+/// Returns a flat array [x0, y0, x1, y1, ...] to match the Lisp approach.
 /// The return is somewhat arbitrary. It's possible that if min is 0, and max is huge, that the array vec will need to be larger.
 /// In practice this is a toy problem and it's unlikely anyone would input 0 as a minimum anyways, so this is a somewhat silly edgecase.
 /// We are naively assuming that if someone puts a min of 0, it's to test this edge case, and they probably won't pick a max > 10.
 #[inline]
-fn collect_zero_factor_pairs(min: u64, max: u64) -> ArrayVec<(u64, u64), 12> {
-    if min == 0 {
-        (min..=max).map(|y| (0, y)).collect()
-    } else {
-        ArrayVec::new_const()
-    }
+fn collect_zero_factor_pairs(min: u64, max: u64) -> ArrayVec<u64, 24> {
+    let mut out = ArrayVec::new_const();
+
+        for y in min..=max {
+            out.push(0);
+            out.push(y);
+        }
+    
+    out
 }
 
 /// Collect ordered factor pairs `(x, y)` (with `x <= y`) such that
 /// `x * y == product` and both factors lie in `[min..max]`.
 ///
+/// Returns a flat array [x0, y0, x1, y1, ...] to match the Lisp approach.
 /// Uses a tight divisor window:
 ///   x in [ ceil(product / max) .. min(max, isqrt(product)) ]
 #[inline]
-pub fn collect_factor_pairs(product: u64, min: u64, max: u64) -> ArrayVec<(u64, u64), 12> {
+pub fn collect_factor_pairs(product: u64, min: u64, max: u64) -> ArrayVec<u64, 24> {
     if product == 0 {
         return collect_zero_factor_pairs(min, max);
     }
@@ -186,17 +191,18 @@ pub fn collect_factor_pairs(product: u64, min: u64, max: u64) -> ArrayVec<(u64, 
     let low = product.div_ceil(max).max(min);
     let high = product.isqrt().min(max);
 
-    // We probably only need a 3 sized ArrayVec here (in practice, other than
+    // We probably only need a 6 sized ArrayVec here (in practice, other than
     // the edge case of min == 0, I've only ever seen two factor pairs for a
-    // single palindrome product). We set 12 because we need it to match the type from
+    // single palindrome product). We set 24 because we need it to match the type from
     // the zero edge case, which ultimately could be infinite, but in practice
     // won't be.
-    let mut out: ArrayVec<(u64, u64), 12> = ArrayVec::new_const();
+    let mut out: ArrayVec<u64, 24> = ArrayVec::new_const();
     for x in low..=high {
         if product % x == 0 {
             // y is automatically >= x because x <= isqrt(product)
             let y = product / x;
-            out.push((x, y));
+            out.push(x);
+            out.push(y);
         }
     }
 
@@ -211,6 +217,8 @@ pub fn collect_factor_pairs(product: u64, min: u64, max: u64) -> ArrayVec<(u64, 
 ///
 /// Returns `Some((product, pairs))` or `None` if either the range is invalid or
 /// no palindrome exists.
+/// 
+/// The factor pairs are returned as a flat array [x0, y0, x1, y1, ...].
 ///
 /// Algorithm:
 /// - `x` ascends from `min` to `max`.
@@ -220,7 +228,7 @@ pub fn collect_factor_pairs(product: u64, min: u64, max: u64) -> ArrayVec<(u64, 
 /// - Iterate `y` from `x` to `y_upper`; the first palindrome in that row is
 ///   the row minimum; update `best` and continue.
 #[inline]
-pub fn smallest(min: u64, max: u64) -> Option<(u64, ArrayVec<(u64, u64), 12>)> {
+pub fn smallest(min: u64, max: u64) -> Option<(u64, ArrayVec<u64, 24>)> {
     if min > max {
         return None;
     }
@@ -259,6 +267,8 @@ pub fn smallest(min: u64, max: u64) -> Option<(u64, ArrayVec<(u64, u64), 12>)> {
 ///
 /// Returns `Some((product, pairs))` or `None` if either the range is invalid or
 /// no palindrome exists.
+/// 
+/// The factor pairs are returned as a flat array [x0, y0, x1, y1, ...].
 ///
 /// Algorithm:
 /// - `x` descends from `max` to `min`.
@@ -269,7 +279,7 @@ pub fn smallest(min: u64, max: u64) -> Option<(u64, ArrayVec<(u64, u64), 12>)> {
 /// - Iterate `y` from `max` down to `y_lower`; the first palindrome in that row
 ///   is the row maximum; update `best` and continue.
 #[inline]
-pub fn largest(min: u64, max: u64) -> Option<(u64, ArrayVec<(u64, u64), 12>)> {
+pub fn largest(min: u64, max: u64) -> Option<(u64, ArrayVec<u64, 24>)> {
     if min > max {
         return None;
     }
@@ -392,36 +402,59 @@ mod tests {
     }
 
     fn assert_some_eq(
-        got: Option<(u64, ArrayVec<(u64, u64), 12>)>,
+        got: Option<(u64, ArrayVec<u64, 24>)>,
         expect_p: u64,
         expect_factors: &[(u64, u64)],
     ) {
         let (p, f) = got.expect("expected Some(..), got None");
         assert_eq!(p, expect_p, "product mismatch");
-        assert_eq!(norm(f), norm(expect_factors.to_vec()), "factors mismatch");
+        
+        // Convert flat array to pairs for comparison
+        let mut pairs = Vec::new();
+        for i in (0..f.len()).step_by(2) {
+            if i + 1 < f.len() {
+                pairs.push((f[i], f[i + 1]));
+            }
+        }
+        assert_eq!(norm(pairs), norm(expect_factors.to_vec()), "factors mismatch");
     }
 
     #[test]
     fn test_smallest() {
         let (product, factors) = smallest(910, 999).unwrap();
         assert_eq!(product, 861168);
-        assert_eq!(factors[0], (924, 932));
+        assert_eq!(factors[0], 924);
+        assert_eq!(factors[1], 932);
     }
 
     #[test]
     fn largest_910_999() {
-        let (p, mut f) = largest(910, 999).unwrap();
-        f.sort();
+        let (p, f) = largest(910, 999).unwrap();
         assert_eq!(p, 906_609);
-        assert!(f.contains(&(913, 993)));
+        // Check if (913, 993) is in the flat array
+        let mut found = false;
+        for i in (0..f.len()).step_by(2) {
+            if i + 1 < f.len() && f[i] == 913 && f[i + 1] == 993 {
+                found = true;
+                break;
+            }
+        }
+        assert!(found);
     }
 
     #[test]
     fn largest_100_999() {
-        let (p, mut f) = largest(100, 999).unwrap();
-        f.sort();
+        let (p, f) = largest(100, 999).unwrap();
         assert_eq!(p, 906_609);
-        assert!(f.contains(&(913, 993)));
+        // Check if (913, 993) is in the flat array
+        let mut found = false;
+        for i in (0..f.len()).step_by(2) {
+            if i + 1 < f.len() && f[i] == 913 && f[i + 1] == 993 {
+                found = true;
+                break;
+            }
+        }
+        assert!(found);
     }
 
     #[test]
