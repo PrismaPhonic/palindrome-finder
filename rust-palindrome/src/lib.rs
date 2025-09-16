@@ -76,27 +76,44 @@ use arrayvec::ArrayVec;
 fn has_even_digits(n: u64) -> bool {
     debug_assert!(n >= 11);
 
-    match n {
-        11..=99 => true,                                           // 2 digits
-        100..=999 => false,                                        // 3
-        1_000..=9_999 => true,                                     // 4
-        10_000..=99_999 => false,                                  // 5
-        100_000..=999_999 => true,                                 // 6
-        1_000_000..=9_999_999 => false,                            // 7
-        10_000_000..=99_999_999 => true,                           // 8
-        100_000_000..=999_999_999 => false,                        // 9
-        1_000_000_000..=9_999_999_999 => true,                     // 10
-        10_000_000_000..=99_999_999_999 => false,                  // 11
-        100_000_000_000..=999_999_999_999 => true,                 // 12
-        1_000_000_000_000..=9_999_999_999_999 => false,            // 13
-        10_000_000_000_000..=99_999_999_999_999 => true,           // 14
-        100_000_000_000_000..=999_999_999_999_999 => false,        // 15
-        1_000_000_000_000_000..=9_999_999_999_999_999 => true,     // 16
-        10_000_000_000_000_000..=99_999_999_999_999_999 => false,  // 17
-        100_000_000_000_000_000..=999_999_999_999_999_999 => true, // 18
-        // For the rest of u64 range (19+ digits), treat as odd length to match
-        // the current Common Lisp mapping. Adjust if you ever extend CL bounds.
-        _ => false,
+    // Use bit manipulation to count digits efficiently
+    // This avoids floating point and reduces the number of comparisons
+    if n < 100 {
+        true  // 2 digits
+    } else if n < 1_000 {
+        false // 3 digits
+    } else if n < 10_000 {
+        true  // 4 digits
+    } else if n < 100_000 {
+        false // 5 digits
+    } else if n < 1_000_000 {
+        true  // 6 digits
+    } else if n < 10_000_000 {
+        false // 7 digits
+    } else if n < 100_000_000 {
+        true  // 8 digits
+    } else if n < 1_000_000_000 {
+        false // 9 digits
+    } else if n < 10_000_000_000 {
+        true  // 10 digits
+    } else if n < 100_000_000_000 {
+        false // 11 digits
+    } else if n < 1_000_000_000_000 {
+        true  // 12 digits
+    } else if n < 10_000_000_000_000 {
+        false // 13 digits
+    } else if n < 100_000_000_000_000 {
+        true  // 14 digits
+    } else if n < 1_000_000_000_000_000 {
+        false // 15 digits
+    } else if n < 10_000_000_000_000_000 {
+        true  // 16 digits
+    } else if n < 100_000_000_000_000_000 {
+        false // 17 digits
+    } else if n < 1_000_000_000_000_000_000 {
+        true  // 18 digits
+    } else {
+        false // 19+ digits
     }
 }
 
