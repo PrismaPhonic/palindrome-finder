@@ -2,6 +2,7 @@
 {-# LANGUAGE Strict #-}
 {-# LANGUAGE UnboxedTuples #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE MagicHash #-}
 
 module Palindrome
   ( smallest
@@ -9,12 +10,13 @@ module Palindrome
   , isPalindrome
   , hasEvenDigits
   , collectFactorPairs
+  , sumUArray
   , Result(..)
   , runServer
   ) where
 
-import Data.Array.Unboxed (UArray, listArray, (!), bounds, elems)
-import Data.Array.ST (STArray, newArray, readArray, writeArray, freeze)
+import Data.Array.Unboxed (UArray, listArray, (!), bounds)
+import Data.Array.ST (STUArray, newArray, readArray, writeArray, freeze)
 import Control.Monad.ST (ST, runST)
 import Control.Monad (forM_)
 import Data.Word (Word64)
@@ -22,6 +24,26 @@ import Data.Maybe (Maybe(..))
 import Data.List (sort)
 import Data.Char (toUpper)
 import System.IO (hFlush, stdout)
+import GHC.Exts
+  ( Word#
+  , remWord#
+  , quotWord#
+  , timesWord#
+  , plusWord#
+  , leWord#
+  , ltWord#
+  , eqWord#
+  , isTrue#
+  , Word64#
+  , remWord64#
+  , quotWord64#
+  , timesWord64#
+  , plusWord64#
+  , leWord64#
+  , eqWord64#
+  , wordToWord64#
+  )
+import GHC.Word (Word64(..))
 
 -- | Result type matching Rust's Option<(u64, ArrayVec<u64, 24>)>
 data Result = Result
@@ -29,19 +51,32 @@ data Result = Result
   , pairs   :: !(UArray Int Word64)
   } deriving (Show)
 
+-- | Sum elements of an unboxed array without allocating an intermediate list.
+{-# INLINE sumUArray #-}
+sumUArray :: UArray Int Word64 -> Word64
+sumUArray arr =
+  let (lo, hi) = bounds arr
+      go !i !acc
+        | i > hi = acc
+        | otherwise = let !v = arr ! i
+                       in go (i + 1) (acc + v)
+  in go lo 0
+
 -- | Fast integer square root using Newton's method
+{-# INLINE fastIsqrt #-}
 fastIsqrt :: Word64 -> Word64
 fastIsqrt n
   | n < 2 = n
-  | otherwise = newton n (n `div` 2)
+  | otherwise = newton n (n `quot` 2)
   where
     newton !x !guess
       | newGuess >= guess = guess
       | otherwise = newton x newGuess
       where
-        newGuess = (guess + x `div` guess) `div` 2
+        newGuess = (guess + x `quot` guess) `quot` 2
 
 -- | Check if a number has an even number of digits
+{-# INLINE hasEvenDigits #-}
 hasEvenDigits :: Word64 -> Bool
 hasEvenDigits n
   | n < 100 = True
@@ -64,28 +99,43 @@ hasEvenDigits n
   | otherwise = False
 
 -- | Check if a number is a palindrome using half-reverse method
+{-# INLINE isPalindrome #-}
 isPalindrome :: Word64 -> Bool
 isPalindrome n
   | n < 10 = True
-  | n `mod` 10 == 0 = False  -- trailing zero
-  | hasEvenDigits n && n `mod` 11 /= 0 = False  -- even digits must be divisible by 11
-  | otherwise = halfReverse n 0
-  where
-    halfReverse !m !rev
-      | m <= rev = m == rev || m == rev `div` 10
-      | otherwise = halfReverse (m `div` 10) (rev * 10 + m `mod` 10)
+  | n `rem` 10 == 0 = False  -- trailing zero
+  | hasEvenDigits n && n `rem` 11 /= 0 = False  -- even digits must be divisible by 11
+  | otherwise = isPalindromePrim n
+
+{-# INLINE isPalindromePrim #-}
+isPalindromePrim :: Word64 -> Bool
+isPalindromePrim (W64# w0#) =
+  -- Half-reverse using Word# primops
+  let ten64# = wordToWord64# 10##
+      loop :: Word64# -> Word64# -> Bool
+      loop m# rev# =
+        if isTrue# (leWord64# m# rev#)
+          then isTrue# (eqWord64# m# rev#) || isTrue# (eqWord64# m# (quotWord64# rev# ten64#))
+          else
+            let digit# = remWord64# m# ten64#
+                rev'#   = plusWord64# (timesWord64# rev# ten64#) digit#
+                m'#     = quotWord64# m# ten64#
+            in loop m'# rev'#
+  in loop w0# (wordToWord64# 0##)
 
 -- | Collect factor pairs for a product, returning unboxed array
+{-# INLINE collectFactorPairs #-}
 collectFactorPairs :: Word64 -> Word64 -> Word64 -> UArray Int Word64
 collectFactorPairs product minVal maxVal
   | product == 0 = collectZeroFactorPairs minVal maxVal
   | otherwise = collectPositiveFactorPairs product minVal maxVal
 
 -- | Collect zero factor pairs (0, y) for y in [min, max]
+{-# INLINE collectZeroFactorPairs #-}
 collectZeroFactorPairs :: Word64 -> Word64 -> UArray Int Word64
 collectZeroFactorPairs minVal maxVal = runST $ do
   let count = fromIntegral $ 2 * (maxVal - minVal + 1)
-  arr <- newArray (0, count - 1) 0 :: ST s (STArray s Int Word64)
+  arr <- newArray (0, count - 1) 0 :: ST s (STUArray s Int Word64)
   let go !i !y
         | y > maxVal = return ()
         | otherwise = do
@@ -96,17 +146,18 @@ collectZeroFactorPairs minVal maxVal = runST $ do
   freeze arr
 
 -- | Collect positive factor pairs using tight divisor window
+{-# INLINE collectPositiveFactorPairs #-}
 collectPositiveFactorPairs :: Word64 -> Word64 -> Word64 -> UArray Int Word64
 collectPositiveFactorPairs product minVal maxVal = runST $ do
   let sqrtp = fastIsqrt product
-      low = max minVal ((product + maxVal - 1) `div` maxVal)  -- ceil(product/max)
+      low = max minVal ((product + maxVal - 1) `quot` maxVal)  -- ceil(product/max)
       high = min maxVal sqrtp
       maxPairs = 12  -- 6 pairs * 2 elements per pair
-  arr <- newArray (0, maxPairs - 1) 0 :: ST s (STArray s Int Word64)
+  arr <- newArray (0, maxPairs - 1) 0 :: ST s (STUArray s Int Word64)
   let go !count !x
         | x > high || count >= maxPairs = return count
-        | product `mod` x == 0 = do
-            let y = product `div` x
+        | product `rem` x == 0 = do
+            let y = product `quot` x
             if y >= x && y <= maxVal
               then do
                 writeArray arr count x
@@ -119,13 +170,18 @@ collectPositiveFactorPairs product minVal maxVal = runST $ do
   if finalCount == 0
     then return $ listArray (0, -1) []  -- empty array
     else do
-      result <- newArray (0, finalCount - 1) 0 :: ST s (STArray s Int Word64)
-      forM_ [0..finalCount-1] $ \i -> do
-        val <- readArray arr i
-        writeArray result i val
+      result <- newArray (0, finalCount - 1) 0 :: ST s (STUArray s Int Word64)
+      let copyLoop !i
+            | i >= finalCount = return ()
+            | otherwise = do
+                v <- readArray arr i
+                writeArray result i v
+                copyLoop (i + 1)
+      copyLoop 0
       freeze result
 
 -- | Find smallest palindromic product
+{-# INLINE smallest #-}
 smallest :: Word64 -> Word64 -> Maybe Result
 smallest minVal maxVal
   | minVal > maxVal = Nothing
@@ -135,6 +191,7 @@ smallest minVal maxVal
   where
     searchSmallest !min' !max' = go min' (maxBound :: Word64)
       where
+        -- x ascends; outer prune mirrors Rust: break when x*x >= best
         go !x !best
           | x > max' = if best == maxBound then Nothing else Just (best, collectFactorPairs best min' max')
           | x * x >= best = if best == maxBound then Nothing else Just (best, collectFactorPairs best min' max')
@@ -146,15 +203,16 @@ smallest minVal maxVal
               | yUpper < x' = Nothing
               | otherwise = goY x' currentBest
               where
-                yUpper = min max' ((currentBest - 1) `div` x')
+                yUpper = min max' ((currentBest - 1) `quot` x')
                 goY !y !rowBest
                   | y > yUpper = if rowBest == maxBound then Nothing else Just rowBest
                   | otherwise = let prod = x' * y
-                                in if isPalindrome prod
-                                   then Just prod  -- first palindrome in row is the minimum, return it
-                                   else goY (y + 1) rowBest
+                                in if {-# SCC pal_check_smallest #-} isPalindrome prod
+                                     then Just prod
+                                     else goY (y + 1) rowBest
 
 -- | Find largest palindromic product
+{-# INLINE largest #-}
 largest :: Word64 -> Word64 -> Maybe Result
 largest minVal maxVal
   | minVal > maxVal = Nothing
@@ -164,6 +222,7 @@ largest minVal maxVal
   where
     searchLargest !min' !max' = go max' 0
       where
+        -- x descends; outer prune mirrors Rust: break when x*max <= best
         go !x !best
           | x < min' = if best == 0 then Nothing else Just (best, collectFactorPairs best min' max')
           | x * max' <= best = if best == 0 then Nothing else Just (best, collectFactorPairs best min' max')
@@ -175,13 +234,13 @@ largest minVal maxVal
             searchRow !x'
               | x' == 0 = Nothing
               | otherwise =
-                  let yLower = max x' ((best `div` x') + 1)
+                  let yLower = max x' ((best `quot` x') + 1)
                       goY !y !currentBest
                         | y < yLower = if currentBest == 0 then Nothing else Just currentBest
                         | otherwise = let prod = x' * y
-                                      in if isPalindrome prod
-                                         then Just prod
-                                         else goY (y - 1) currentBest
+                                      in if {-# SCC pal_check_largest #-} isPalindrome prod
+                                           then Just prod
+                                           else goY (y - 1) currentBest
                   in if yLower > max'
                        then Nothing
                        else goY max' 0

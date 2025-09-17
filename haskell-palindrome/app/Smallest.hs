@@ -3,7 +3,7 @@
 module Main where
 
 import qualified Palindrome as P
-import Palindrome (smallest, runServer, Result(..))
+import Palindrome (smallest, runServer, Result(..), sumUArray)
 import System.Environment (getArgs)
 import Data.Word (Word64)
 import Data.Maybe (maybe)
@@ -32,7 +32,7 @@ doIters minVal maxVal iters =
                                   Nothing -> (acc, cnt)
                                   Just r  ->
                                     let prod = P.product r
-                                        sPairs = F.foldl' (+) 0 (elems (P.pairs r))
+                                        sPairs = sumUArray (P.pairs r)
                                         !a' = acc + prod + sPairs + cnt
                                     in (a', cnt + 1)
                 nextMin = if currentMin >= maxVal then minVal else currentMin + 1
