@@ -22,7 +22,8 @@ opt-level = 3
 panic = "abort"
 overflow-checks = false
 debug = false
-strip = true
+# BOLT requires symbols; do not strip in release
+strip = false
 
 [dependencies]
 arrayvec = "0.7.6"

@@ -80,6 +80,8 @@ pub fn benches(c: &mut Criterion) {
     let fast_sm = "../target-bin/palprod-fast-smallest-inner";
     let rust_lg = "../target-bin/palprod-rust-largest";
     let rust_sm = "../target-bin/palprod-rust-smallest";
+    let rust_lg_bolt_opt = "../target-bin/palprod-rust-largest-bolt-optimized";
+    let rust_sm_bolt_opt = "../target-bin/palprod-rust-smallest-bolt-optimized";
     let go_lg = "../target-bin/palprod-go-largest";
     let go_sm = "../target-bin/palprod-go-smallest";
     let haskell_lg = "../target-bin/palprod-haskell-largest";
@@ -90,6 +92,9 @@ pub fn benches(c: &mut Criterion) {
 
     bench_servered(c, "RUST   largest 1..999", rust_lg, 1, 999);
     bench_servered(c, "RUST   smallest 1..999", rust_sm, 1, 999);
+    // If present, also benchmark PGO/BOLT variants
+    if std::path::Path::new(rust_lg_bolt_opt).exists() { bench_servered(c, "RUST+BOLT largest 1..999", rust_lg_bolt_opt, 1, 999); }
+    if std::path::Path::new(rust_sm_bolt_opt).exists() { bench_servered(c, "RUST+BOLT smallest 1..999", rust_sm_bolt_opt, 1, 999); }
 
     bench_servered(c, "GO     largest 1..999", go_lg, 1, 999);
     bench_servered(c, "GO     smallest 1..999", go_sm, 1, 999);
