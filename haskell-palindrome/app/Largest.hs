@@ -10,54 +10,34 @@ import Data.Maybe (maybe)
 import Data.Array.Unboxed (elems)
 import qualified Data.Foldable as F
 
+-- Prevent GHC from hoisting loop-invariant calls by making the argument
+-- syntactically depend on the inner-loop index. The NOINLINE pragma avoids
+-- the optimizer from collapsing the dependency away.
+
 -- | Server implementation for largest palindrome
 doIters :: Word64 -> Word64 -> Word64 -> (Word64, Word64)
 
 doIters minVal maxVal iters = 
   let rangeCount :: Word64
       rangeCount = if maxVal >= minVal then (maxVal - minVal + 1) else 0
-      q :: Word64
-      q = if rangeCount > 0 then iters `div` rangeCount else 0
-      r :: Word64
-      r = if rangeCount > 0 then iters `mod` rangeCount else 0
-      -- Base iterations: run q times for each range
-      goBaseRanges :: Word64 -> Word64 -> Word64 -> (Word64, Word64)
-      goBaseRanges idx acc cnt
-        | idx >= rangeCount = (acc, cnt)
-        | otherwise =
-            let currentMax = maxVal - idx
-                goRuns j a c
-                  | j >= q = (a, c)
-                  | otherwise =
-                      let res = largest minVal currentMax
-                      in case res of
-                           Nothing ->
-                             goRuns (j + 1) a c
-                           Just r  ->
-                             let prod = P.product r
-                                 sPairs = F.foldl' (+) 0 (elems (P.pairs r))
-                                 !a' = a + prod + sPairs + c
-                             in goRuns (j + 1) a' (c + 1)
-                (!acc1, !cnt1) = goRuns 0 acc cnt
-            in goBaseRanges (idx + 1) acc1 cnt1
 
-      -- Remainder iterations: run 1 additional time for first r ranges
-      goRemainderRanges :: Word64 -> Word64 -> Word64 -> (Word64, Word64)
-      goRemainderRanges idx acc cnt
-        | idx >= r = (acc, cnt)
+      -- Single loop: iterate currentMax from max..min cycling, for exactly `iters` steps
+      go :: Word64 -> Word64 -> Word64 -> Word64 -> (Word64, Word64)
+      go !n !currentMax !acc !cnt
+        | n >= iters = (acc, cnt)
         | otherwise =
-            let currentMax = maxVal - idx
-            in case largest minVal currentMax of
-                 Nothing ->
-                   goRemainderRanges (idx + 1) acc cnt
-                 Just r' ->
-                   let prod = P.product r'
-                       sPairs = F.foldl' (+) 0 (elems (P.pairs r'))
-                       !acc' = acc + prod + sPairs + cnt
-                   in goRemainderRanges (idx + 1) acc' (cnt + 1)
+            let res = largest minVal currentMax
+                (acc', cnt') = case res of
+                                  Nothing -> (acc, cnt)
+                                  Just r  ->
+                                    let prod = P.product r
+                                        sPairs = F.foldl' (+) 0 (elems (P.pairs r))
+                                        !a' = acc + prod + sPairs + cnt
+                                    in (a', cnt + 1)
+                nextMax = if currentMax <= minVal then maxVal else currentMax - 1
+            in go (n + 1) nextMax acc' cnt'
 
-      (!accAfterBase, !cntAfterBase) = if rangeCount == 0 then (0, 0) else goBaseRanges 0 0 0
-      (!acc0, !_cntFinal) = if rangeCount == 0 then (0, 0) else goRemainderRanges 0 accAfterBase cntAfterBase
+      (!acc0, !_cntFinal) = if rangeCount == 0 then (0, 0) else go 0 maxVal 0 0
       !base = largest minVal maxVal
       prod0 = maybe 0 P.product base
   in (prod0, acc0)

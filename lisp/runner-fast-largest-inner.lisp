@@ -8,39 +8,25 @@
 
 (defun %do-iters (min max iters)
   (declare (type fixnum min max iters))
-  (let* ((range-count (- max min -1))
-         (iters-per-range (truncate iters range-count))
-         (remainder (mod iters range-count))
-         (acc 0)
-         (cnt 0))
-    (declare (type fixnum range-count iters-per-range remainder acc cnt))
-    ;; Base iterations: run iters-per-range times for each range
-    (loop for idx from 0 below range-count do
-      (let ((current-max (- max idx)))
-        (loop for j from 0 below iters-per-range do
-          (multiple-value-bind (p vec) (pp-fast:largest-inner min current-max)
-            (when p
-              (let ((sum 0))
-                (declare (type fixnum p sum)
-                         (type (simple-array (signed-byte 64) (*)) vec))
-                (loop for i from 0 below (length vec) by 2 do
-                  (when (< (1+ i) (length vec))
-                    (incf sum (+ (aref vec i) (aref vec (1+ i))))))
-                (incf acc (+ p sum cnt))
-                (incf cnt)))))))
-    ;; Remainder iterations: run 1 additional time for first remainder ranges
-    (loop for idx from 0 below remainder do
-      (let ((current-max (- max idx)))
-        (multiple-value-bind (p vec) (pp-fast:largest-inner min current-max)
-          (when p
-            (let ((sum 0))
-              (declare (type fixnum p sum)
-                       (type (simple-array (signed-byte 64) (*)) vec))
-              (loop for i from 0 below (length vec) by 2 do
-                (when (< (1+ i) (length vec))
-                  (incf sum (+ (aref vec i) (aref vec (1+ i))))))
-              (incf acc (+ p sum cnt))
-              (incf cnt))))))
+  (let* ((acc 0)
+         (cnt 0)
+         (current-max max))
+    (declare (type fixnum acc cnt current-max))
+    ;; Unique-iteration scheme: cycle current-max from max..min for exactly `iters` steps
+    (loop for n fixnum from 0 below iters do
+      (multiple-value-bind (p vec) (pp-fast:largest-inner min current-max)
+        (when p
+          (let ((sum 0))
+            (declare (type fixnum p sum)
+                     (type (simple-array (signed-byte 64) (*)) vec))
+            (loop for i from 0 below (length vec) by 2 do
+              (when (< (1+ i) (length vec))
+                (incf sum (+ (aref vec i) (aref vec (1+ i))))))
+            (incf acc (+ p sum cnt))
+            (incf cnt))))
+      (setf current-max (if (<= current-max min)
+                            max
+                            (the fixnum (1- current-max)))))
     ;; Return the result for the original range and the accumulator
     (multiple-value-bind (p _vec) (pp-fast:largest-inner min max)
       (declare (ignore _vec))

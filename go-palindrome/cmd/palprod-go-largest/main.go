@@ -9,32 +9,11 @@ import (
 )
 
 func doIters(min, max uint64, iters uint64) (uint64, uint64) {
-	rangeCount := max - min + 1
-	itersPerRange := iters / rangeCount
-	remainder := iters % rangeCount
 	var acc uint64 = 0
 	var counter uint64 = 0
+	currentMax := max
 
-	// Base iterations: run itersPerRange times for each range
-	for idx := uint64(0); idx < rangeCount; idx++ {
-		currentMax := max - idx
-		for j := uint64(0); j < itersPerRange; j++ {
-			if res := palindrome.Largest(min, currentMax); res != nil {
-				prod := res.Product
-				fpairs := res.Pairs
-				var sPairs uint64
-				for k := 0; k+1 < len(fpairs); k += 2 {
-					sPairs += fpairs[k] + fpairs[k+1]
-				}
-				acc += prod + sPairs + counter
-				counter++
-			}
-		}
-	}
-
-	// Remainder iterations: run 1 additional time for first remainder ranges
-	for idx := uint64(0); idx < remainder; idx++ {
-		currentMax := max - idx
+	for n := uint64(0); n < iters; n++ {
 		if res := palindrome.Largest(min, currentMax); res != nil {
 			prod := res.Product
 			fpairs := res.Pairs
@@ -44,6 +23,11 @@ func doIters(min, max uint64, iters uint64) (uint64, uint64) {
 			}
 			acc += prod + sPairs + counter
 			counter++
+		}
+		if currentMax <= min {
+			currentMax = max
+		} else {
+			currentMax--
 		}
 	}
 

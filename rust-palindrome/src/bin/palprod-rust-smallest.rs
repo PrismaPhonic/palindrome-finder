@@ -3,32 +3,18 @@ use std::env;
 use std::process::exit;
 
 fn do_iters(min: u64, max: u64, iters: u64) -> (Option<u64>, u64) {
-    let range_count = max - min + 1;
-    let iters_per_range = iters / range_count;
-    let remainder = iters % range_count;
     let mut acc: u64 = 0;
     let mut counter: u64 = 0;
-    
-    // Run iters_per_range times for each range
-    for idx in 0..range_count {
-        let current_min = min + idx;
-        for _ in 0..iters_per_range {
-            if let Some((prod, pairs)) = smallest(current_min, max) {
-                let sum_pairs: u64 = pairs.iter().copied().sum();
-                acc += prod + sum_pairs + counter;
-                counter += 1;
-            }
-        }
-    }
-    
-    // Handle remainder as direct additional iterations
-    for idx in 0..remainder {
-        let current_min = min + idx;
+    let mut current_min = min;
+
+    for _n in 0..iters {
         if let Some((prod, pairs)) = smallest(current_min, max) {
             let sum_pairs: u64 = pairs.iter().copied().sum();
             acc += prod + sum_pairs + counter;
             counter += 1;
         }
+
+        current_min = if current_min >= max { min } else { current_min + 1 };
     }
 
     let base_prod = smallest(min, max).map(|(p, _)| p);
