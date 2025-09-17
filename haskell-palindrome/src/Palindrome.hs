@@ -103,8 +103,8 @@ hasEvenDigits n
 isPalindrome :: Word64 -> Bool
 isPalindrome n
   | n < 10 = True
-  | n `rem` 10 == 0 = False  -- trailing zero
   | hasEvenDigits n && n `rem` 11 /= 0 = False  -- even digits must be divisible by 11
+  | n `rem` 10 == 0 = False  -- trailing zero
   | otherwise = isPalindromePrim n
 
 {-# INLINE isPalindromePrim #-}
