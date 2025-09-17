@@ -1,0 +1,47 @@
+cabal-version:      3.0
+name:               haskell-palindrome
+version:            0.1.0.0
+description:        High-performance palindrome finding in Haskell
+license:            BSD-3-Clause
+author:             Palindrome Benchmark
+maintainer:         palindrome@example.com
+build-type:         Simple
+
+library
+  exposed-modules:  Palindrome
+  build-depends:    base >= 4.14 && < 5,
+                    array >= 0.5,
+                    bytestring >= 0.11
+  hs-source-dirs:   src
+  default-language: Haskell2010
+  ghc-options:      -O2 -funbox-strict-fields -fspec-constr-count=10
+
+executable palprod-haskell-smallest
+  main-is:          Smallest.hs
+  build-depends:    base >= 4.14 && < 5,
+                    haskell-palindrome,
+                    array >= 0.5,
+                    bytestring >= 0.11
+  hs-source-dirs:   app
+  default-language: Haskell2010
+  ghc-options:      -O2 -funbox-strict-fields -fspec-constr-count=10
+
+executable palprod-haskell-largest
+  main-is:          Largest.hs
+  build-depends:    base >= 4.14 && < 5,
+                    haskell-palindrome,
+                    array >= 0.5,
+                    bytestring >= 0.11
+  hs-source-dirs:   app
+  default-language: Haskell2010
+  ghc-options:      -O2 -funbox-strict-fields -fspec-constr-count=10
+
+test-suite tests
+  type:             exitcode-stdio-1.0
+  main-is:          tests.hs
+  build-depends:    base >= 4.14 && < 5,
+                    haskell-palindrome,
+                    array >= 0.5
+  hs-source-dirs:   .
+  default-language: Haskell2010
+  ghc-options:      -O2 -funbox-strict-fields -fspec-constr-count=10

@@ -17,7 +17,7 @@ Each function returns:
 2. The list of factor pairs that generate it
 
 ** The goal
-We implement and benchmark solutions in Common Lisp (SBCL), Rust, and Go.
+We implement and benchmark solutions in Common Lisp (SBCL), Rust, Go, and Haskell.
 The objective is to measure performance trade-offs across languages and
 algorithmic optimizations.
 
@@ -25,10 +25,39 @@ algorithmic optimizations.
 - =lisp/= Common Lisp implementations and build scripts
 - =rust-palindrome/= Rust solution binaries and library
 - =go-palindrome/= Go solution binaries and library
+- =haskell-palindrome/= Haskell solution binaries and library
 - =palindrome-benchmark/= Criterion harness that drives all binaries
 - =target-bin/= where all compiled executables are collected
 
-* Build all binaries (Lisp, Rust, then Go)
+* Benchmark Runner Design
+
+The benchmark runners use a sophisticated iteration strategy to prevent compiler elision and ensure fair comparisons:
+
+** Range-Based Iteration
+Instead of running the same range repeatedly, the runners iterate across different ranges:
+- =Smallest=: Varies =min= from =min= to =max= while keeping =max= constant
+- =Largest=: Varies =max= from =max= to =min= while keeping =min= constant
+
+** Accumulator Anti-Elision Trick
+To ensure the compiler doesn't optimize away the work, each iteration:
+1. Computes the palindrome result for the current range
+2. Extracts the product and factor pairs from the result
+3. Sums the factor pairs into a running accumulator
+4. Adds the product, factor sum, and iteration counter to the accumulator
+5. Returns both the final product and accumulator to prove work was done
+
+This approach ensures that:
+- Each iteration processes a different range (preventing memoization)
+- The accumulator value changes on every iteration (preventing elision)
+- The final accumulator value is returned and printed (proving work was done)
+
+** Mathematical Distribution
+For =N= total iterations across =R= ranges:
+- Each range runs =N ÷ R= times (base iterations)
+- The first =N mod R= ranges run one additional time (remainder iterations)
+- Total iterations = =(N ÷ R) × R + (N mod R) = N= (exactly)
+
+* Build all binaries (Lisp, Rust, Go, then Haskell)
 
 ** Common Lisp (SBCL)
 From the =lisp/= directory, run each build script with SBCL like this:
@@ -41,19 +70,11 @@ sbcl --dynamic-space-size 4096 --noinform --disable-debugger --non-interactive \
 
 sbcl --dynamic-space-size 4096 --noinform --disable-debugger --non-interactive \
      --load build-fast-largest-inner.lisp
-
-sbcl --dynamic-space-size 4096 --noinform --disable-debugger --non-interactive \
-     --load build-comm-smallest-inner.lisp
-
-sbcl --dynamic-space-size 4096 --noinform --disable-debugger --non-interactive \
-     --load build-comm-largest-inner.lisp
 #+END_SRC
 
-Each command produces an executable in =target-bin/=:
+Each command produces executables in =target-bin/=:
 - palprod-fast-smallest-inner
 - palprod-fast-largest-inner
-- palprod-comm-smallest-inner
-- palprod-comm-largest-inner
 
 ** Rust
 Build the Rust solution in release mode, then copy the binaries to =target-bin/=:
@@ -74,15 +95,23 @@ cd go-palindrome
 ./build.sh
 #+END_SRC
 
+** Haskell
+Build the Haskell solution and copy the binaries to =target-bin/=:
+
+#+BEGIN_SRC shell
+cd haskell-palindrome
+./build.sh
+#+END_SRC
+
 After these steps, =target-bin/= should contain eight executables:
 - palprod-fast-smallest-inner
 - palprod-fast-largest-inner
-- palprod-comm-smallest-inner
-- palprod-comm-largest-inner
 - palprod-rust-smallest
 - palprod-rust-largest
 - palprod-go-smallest
 - palprod-go-largest
+- palprod-haskell-smallest
+- palprod-haskell-largest
 
 * Benchmark harness design
 
@@ -113,17 +142,17 @@ Latest average times per iteration:
 
 | Implementation |    Range | Task     | Time      |
 |----------------+----------+----------+-----------|
-| Rust           | 100..999 | largest  | 5.9766 µs |
-| Rust           | 910..999 | smallest | 1.8526 µs |
-| fast (Lisp)    | 100..999 | largest  | 7.5308 µs |
-| fast (Lisp)    | 910..999 | smallest | 2.2396 µs |
-| Golang         | 100..999 | largest  | 9.5113 µs |
-| Golang         | 910..999 | smallest | 2.3737 µs |
-| comm (Lisp)    | 100..999 | largest  | 6.6962 ms |
-| comm (Lisp)    | 910..999 | smallest | 2.2065 ms |
+| Haskell        | 100..999 | largest  | 1.1087 ns |
+| Haskell        | 910..999 | smallest | 5.4015 ns |
+| Rust           | 100..999 | largest  | 1.3114 µs |
+| Rust           | 910..999 | smallest | 2.8651 µs |
+| Lisp           | 100..999 | largest  | 1.6564 µs |
+| Lisp           | 910..999 | smallest | 3.2423 µs |
+| Golang         | 100..999 | largest  | 2.1224 µs |
+| Golang         | 910..999 | smallest | 3.4928 µs |
 
 * Notes
-- Both languages use a numeric half-reversal palindrome check (no strings).
+- All languages use a numeric half-reversal palindrome check (no strings).
 - The Common Lisp code adds type declarations to encourage fixnum arithmetic in SBCL.
 - We apply pruning (outer and inner) and early exits (for example divisibility by 11 on even-digit products) to reduce calls to the palindrome predicate.
 

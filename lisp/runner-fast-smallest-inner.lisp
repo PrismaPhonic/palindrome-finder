@@ -8,10 +8,43 @@
 
 (defun %do-iters (min max iters)
   (declare (type fixnum min max iters))
-  (loop repeat iters do (pp-fast:smallest-inner min max))
-  (multiple-value-bind (p _vec) (pp-fast:smallest-inner min max)
-    (declare (ignore _vec))
-    p))
+  (let* ((range-count (- max min -1))
+         (iters-per-range (truncate iters range-count))
+         (remainder (mod iters range-count))
+         (acc 0)
+         (cnt 0))
+    (declare (type fixnum range-count iters-per-range remainder acc cnt))
+    ;; Base iterations: run iters-per-range times for each range
+    (loop for idx from 0 below range-count do
+      (let ((current-min (+ min idx)))
+        (loop for j from 0 below iters-per-range do
+          (multiple-value-bind (p vec) (pp-fast:smallest-inner current-min max)
+            (when p
+              (let ((sum 0))
+                (declare (type fixnum p sum)
+                         (type (simple-array (signed-byte 64) (*)) vec))
+                (loop for i from 0 below (length vec) by 2 do
+                  (when (< (1+ i) (length vec))
+                    (incf sum (+ (aref vec i) (aref vec (1+ i))))))
+                (incf acc (+ p sum cnt))
+                (incf cnt)))))))
+    ;; Remainder iterations: run 1 additional time for first remainder ranges
+    (loop for idx from 0 below remainder do
+      (let ((current-min (+ min idx)))
+        (multiple-value-bind (p vec) (pp-fast:smallest-inner current-min max)
+          (when p
+            (let ((sum 0))
+              (declare (type fixnum p sum)
+                       (type (simple-array (signed-byte 64) (*)) vec))
+              (loop for i from 0 below (length vec) by 2 do
+                (when (< (1+ i) (length vec))
+                  (incf sum (+ (aref vec i) (aref vec (1+ i))))))
+              (incf acc (+ p sum cnt))
+              (incf cnt))))))
+    ;; Return the result for the original range and the accumulator
+    (multiple-value-bind (p _vec) (pp-fast:smallest-inner min max)
+      (declare (ignore _vec))
+      (values (or p 0) acc))))
 
 (defun server-loop ()
   (pp-gc:prepare-gc-for-bench)
@@ -32,7 +65,8 @@
                 ((string= cmd "RUN")
                  (let ((iters (parse-integer (second parts))))
                    (if (and min max)
-                       (format t "OK ~D~%" (%do-iters min max iters))
+                       (multiple-value-bind (p acc) (%do-iters min max iters)
+                         (format t "OK ~A ~A~%" p acc))
                        (format t "ERR NOTINIT~%"))
                    (finish-output)))
                 ((string= cmd "QUIT") (return))

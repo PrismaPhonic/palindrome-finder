@@ -2,15 +2,37 @@ use palprod_rust::{run_server, smallest};
 use std::env;
 use std::process::exit;
 
-fn do_iters(min: u64, max: u64, iters: u64) -> Option<u64> {
-    for _ in 0..iters {
-        let _ = smallest(min, max);
+fn do_iters(min: u64, max: u64, iters: u64) -> (Option<u64>, u64) {
+    let range_count = max - min + 1;
+    let iters_per_range = iters / range_count;
+    let remainder = iters % range_count;
+    let mut acc: u64 = 0;
+    let mut counter: u64 = 0;
+    
+    // Run iters_per_range times for each range
+    for idx in 0..range_count {
+        let current_min = min + idx;
+        for _ in 0..iters_per_range {
+            if let Some((prod, pairs)) = smallest(current_min, max) {
+                let sum_pairs: u64 = pairs.iter().copied().sum();
+                acc += prod + sum_pairs + counter;
+                counter += 1;
+            }
+        }
     }
-    if let Some((prod, _pairs)) = smallest(min, max) {
-        Some(prod)
-    } else {
-        None
+    
+    // Handle remainder as direct additional iterations
+    for idx in 0..remainder {
+        let current_min = min + idx;
+        if let Some((prod, pairs)) = smallest(current_min, max) {
+            let sum_pairs: u64 = pairs.iter().copied().sum();
+            acc += prod + sum_pairs + counter;
+            counter += 1;
+        }
     }
+
+    let base_prod = smallest(min, max).map(|(p, _)| p);
+    (base_prod, acc)
 }
 
 fn main() {
@@ -29,5 +51,6 @@ fn main() {
     let min: u64 = args[1].parse().unwrap();
     let max: u64 = args[2].parse().unwrap();
     let iters: u64 = args[3].parse::<u64>().unwrap().max(1);
-    println!("{}", do_iters(min, max, iters).unwrap_or_default());
+    let (prod_opt, _acc) = do_iters(min, max, iters);
+    println!("{}", prod_opt.unwrap_or_default());
 }

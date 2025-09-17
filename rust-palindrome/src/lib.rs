@@ -337,7 +337,7 @@ pub fn largest(min: u64, max: u64) -> Option<(u64, ArrayVec<u64, 24>)> {
 /// factor pair building) and return the final product as `Option<u64>`.
 pub fn run_server<F>(mut do_iters: F)
 where
-    F: FnMut(u64, u64, u64) -> Option<u64>,
+    F: FnMut(u64, u64, u64) -> (Option<u64>, u64),
 {
     let stdin = std::io::stdin();
     let stdout = std::io::stdout();
@@ -375,8 +375,9 @@ where
             "RUN" => {
                 let iters = u64::from_str(parts.next().unwrap_or("")).unwrap();
                 if let (Some(a), Some(b)) = (min, max) {
-                    let prod = do_iters(a, b, iters).unwrap_or_default();
-                    writeln!(writer, "OK {prod}").unwrap();
+                    let (prod_opt, acc) = do_iters(a, b, iters);
+                    let prod = prod_opt.unwrap_or_default();
+                    writeln!(writer, "OK {prod} {acc}").unwrap();
                 } else {
                     writeln!(writer, "ERR NOTINIT").unwrap();
                 }

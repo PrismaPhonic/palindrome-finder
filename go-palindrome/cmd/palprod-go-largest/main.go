@@ -8,15 +8,52 @@ import (
 	"palindrome"
 )
 
-func doIters(min, max uint64, iters uint64) (uint64, bool) {
-	for i := uint64(0); i < iters; i++ {
-		_ = palindrome.Largest(min, max)
+func doIters(min, max uint64, iters uint64) (uint64, uint64) {
+	rangeCount := max - min + 1
+	itersPerRange := iters / rangeCount
+	remainder := iters % rangeCount
+	var acc uint64 = 0
+	var counter uint64 = 0
+
+	// Base iterations: run itersPerRange times for each range
+	for idx := uint64(0); idx < rangeCount; idx++ {
+		currentMax := max - idx
+		for j := uint64(0); j < itersPerRange; j++ {
+			if res := palindrome.Largest(min, currentMax); res != nil {
+				prod := res.Product
+				fpairs := res.Pairs
+				var sPairs uint64
+				for k := 0; k+1 < len(fpairs); k += 2 {
+					sPairs += fpairs[k] + fpairs[k+1]
+				}
+				acc += prod + sPairs + counter
+				counter++
+			}
+		}
 	}
+
+	// Remainder iterations: run 1 additional time for first remainder ranges
+	for idx := uint64(0); idx < remainder; idx++ {
+		currentMax := max - idx
+		if res := palindrome.Largest(min, currentMax); res != nil {
+			prod := res.Product
+			fpairs := res.Pairs
+			var sPairs uint64
+			for k := 0; k+1 < len(fpairs); k += 2 {
+				sPairs += fpairs[k] + fpairs[k+1]
+			}
+			acc += prod + sPairs + counter
+			counter++
+		}
+	}
+
+	// Return the result for the original range
 	result := palindrome.Largest(min, max)
-	if result == nil {
-		return 0, false
+	var prod uint64
+	if result != nil {
+		prod = result.Product
 	}
-	return result.Product, true
+	return prod, acc
 }
 
 func main() {

@@ -270,7 +270,7 @@ func Largest(min, max uint64) *struct {
 //
 // The doIters function must do the full work (including
 // factor pair building) and return the final product as (uint64, bool).
-func RunServer(doIters func(uint64, uint64, uint64) (uint64, bool)) {
+func RunServer(doIters func(uint64, uint64, uint64) (uint64, uint64)) {
 	reader := bufio.NewReader(os.Stdin)
 	writer := bufio.NewWriter(os.Stdout)
 	defer writer.Flush()
@@ -324,7 +324,7 @@ func RunServer(doIters func(uint64, uint64, uint64) (uint64, bool)) {
 				continue
 			}
 			if min != nil && max != nil {
-				doIters(*min, *max, iters)
+				_, _ = doIters(*min, *max, iters)
 			}
 			fmt.Fprintln(writer, "OK")
 			writer.Flush()
@@ -342,8 +342,8 @@ func RunServer(doIters func(uint64, uint64, uint64) (uint64, bool)) {
 				continue
 			}
 			if min != nil && max != nil {
-				prod, _ := doIters(*min, *max, iters)
-				fmt.Fprintf(writer, "OK %d\n", prod)
+				prod, acc := doIters(*min, *max, iters)
+				fmt.Fprintf(writer, "OK %d %d\n", prod, acc)
 			} else {
 				fmt.Fprintln(writer, "ERR NOTINIT")
 			}
