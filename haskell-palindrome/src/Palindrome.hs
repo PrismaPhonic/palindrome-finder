@@ -29,7 +29,10 @@ import GHC.Exts
   , remWord#
   , quotWord#
   , timesWord#
+  , timesWord2#
   , plusWord#
+  , minusWord#
+  , uncheckedShiftRL#
   , leWord#
   , ltWord#
   , eqWord#
@@ -42,8 +45,31 @@ import GHC.Exts
   , leWord64#
   , eqWord64#
   , wordToWord64#
+  , word64ToWord#
   )
 import GHC.Word (Word64(..))
+
+-- Top-level constants and helpers for fast base-10 div/mod using primops
+{-# INLINE mag10Word# #-}
+mag10Word# :: () -> Word#
+mag10Word# _ = 0xCCCCCCCCCCCCCCCD##
+
+{-# INLINE tenWord# #-}
+tenWord# :: () -> Word#
+tenWord# _ = 10##
+
+{-# INLINE divMod10Word# #-}
+divMod10Word# :: Word# -> (# Word# , Word# #)
+divMod10Word# n# =
+  let (# hi#, _lo# #) = timesWord2# n# (mag10Word# ())
+      q# = uncheckedShiftRL# hi# 3#
+      prod# = timesWord# q# (tenWord# ())
+      r# = minusWord# n# prod#
+  in (# q#, r# #)
+
+{-# INLINE quot10Word# #-}
+quot10Word# :: Word# -> Word#
+quot10Word# n# = case divMod10Word# n# of (# q#, _ #) -> q#
 
 -- | Result type matching Rust's Option<(u64, ArrayVec<u64, 24>)>
 data Result = Result
@@ -110,18 +136,18 @@ isPalindrome n
 {-# INLINE isPalindromePrim #-}
 isPalindromePrim :: Word64 -> Bool
 isPalindromePrim (W64# w0#) =
-  -- Half-reverse using Word# primops
-  let ten64# = wordToWord64# 10##
-      loop :: Word64# -> Word64# -> Bool
+  -- Half-reverse using Word# primops with constant-division elimination for /10 and %10
+  let loop :: Word# -> Word# -> Bool
       loop m# rev# =
-        if isTrue# (leWord64# m# rev#)
-          then isTrue# (eqWord64# m# rev#) || isTrue# (eqWord64# m# (quotWord64# rev# ten64#))
+        if isTrue# (leWord# m# rev#)
+          then isTrue# (eqWord# m# rev#) || isTrue# (eqWord# m# (quot10Word# rev#))
           else
-            let digit# = remWord64# m# ten64#
-                rev'#   = plusWord64# (timesWord64# rev# ten64#) digit#
-                m'#     = quotWord64# m# ten64#
-            in loop m'# rev'#
-  in loop w0# (wordToWord64# 0##)
+            case divMod10Word# m# of
+              (# q#, digit# #) ->
+                let rev'# = plusWord# (timesWord# rev# (tenWord# ())) digit#
+                in loop q# rev'#
+
+  in loop (word64ToWord# w0#) 0##
 
 -- | Collect factor pairs for a product, returning unboxed array
 {-# INLINE collectFactorPairs #-}
