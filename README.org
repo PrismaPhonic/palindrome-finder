@@ -156,6 +156,12 @@ Latest average times per iteration:
 - The Common Lisp code adds type declarations to encourage fixnum arithmetic in SBCL.
 - We apply pruning (outer and inner) and early exits (for example divisibility by 11 on even-digit products) to reduce calls to the palindrome predicate.
 
+* Findings: Haskell performance and call for contributions
+
+Over multiple rounds of alignment and profiling, the Haskell implementation consistently trails Rust, SBCL (Common Lisp), and Go.
+
+I write Rust day to day, and don't know these other languages nearly as well. I'm surprised and would have thought Haskell performance would match or exceed Go. If you are a Haskell dev, I'm sure there are dumb things I did, and better ways to optimize the Haskell solution. Please submit a PR!
+
 * Attribution
 Problem statement: Exercism, Common Lisp track, Palindrome Products
 https://exercism.org/tracks/common-lisp/exercises/palindrome-products
