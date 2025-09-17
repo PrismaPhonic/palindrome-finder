@@ -21,38 +21,43 @@ doIters minVal maxVal iters =
       r :: Word64
       r = if rangeCount > 0 then iters `mod` rangeCount else 0
       -- Base iterations: run q times for each range
-      goBaseRanges :: Word64 -> Word64 -> Word64 -> Word64
+      goBaseRanges :: Word64 -> Word64 -> Word64 -> (Word64, Word64)
       goBaseRanges idx acc cnt
-        | idx >= rangeCount = acc
+        | idx >= rangeCount = (acc, cnt)
         | otherwise =
             let currentMax = maxVal - idx
                 goRuns j a c
-                  | j >= q = a
+                  | j >= q = (a, c)
                   | otherwise =
                       let res = largest minVal currentMax
-                          prod = maybe 0 P.product res
-                          sPairs = case res of
-                                     Nothing -> 0
-                                     Just r  -> F.foldl' (+) 0 (elems (P.pairs r))
-                          !a' = a + prod + sPairs + c
-                      in goRuns (j + 1) a' (c + 1)
-            in goBaseRanges (idx + 1) (goRuns 0 acc cnt) cnt
-      
+                      in case res of
+                           Nothing ->
+                             goRuns (j + 1) a c
+                           Just r  ->
+                             let prod = P.product r
+                                 sPairs = F.foldl' (+) 0 (elems (P.pairs r))
+                                 !a' = a + prod + sPairs + c
+                             in goRuns (j + 1) a' (c + 1)
+                (!acc1, !cnt1) = goRuns 0 acc cnt
+            in goBaseRanges (idx + 1) acc1 cnt1
+
       -- Remainder iterations: run 1 additional time for first r ranges
-      goRemainderRanges :: Word64 -> Word64 -> Word64 -> Word64
+      goRemainderRanges :: Word64 -> Word64 -> Word64 -> (Word64, Word64)
       goRemainderRanges idx acc cnt
-        | idx >= r = acc
+        | idx >= r = (acc, cnt)
         | otherwise =
             let currentMax = maxVal - idx
-                res = largest minVal currentMax
-                prod = maybe 0 P.product res
-                sPairs = case res of
-                           Nothing -> 0
-                           Just r' -> F.foldl' (+) 0 (elems (P.pairs r'))
-                !acc' = acc + prod + sPairs + cnt
-            in goRemainderRanges (idx + 1) acc' (cnt + 1)
-      
-      acc0 = if rangeCount == 0 then 0 else goRemainderRanges 0 (goBaseRanges 0 0 0) 0
+            in case largest minVal currentMax of
+                 Nothing ->
+                   goRemainderRanges (idx + 1) acc cnt
+                 Just r' ->
+                   let prod = P.product r'
+                       sPairs = F.foldl' (+) 0 (elems (P.pairs r'))
+                       !acc' = acc + prod + sPairs + cnt
+                   in goRemainderRanges (idx + 1) acc' (cnt + 1)
+
+      (!accAfterBase, !cntAfterBase) = if rangeCount == 0 then (0, 0) else goBaseRanges 0 0 0
+      (!acc0, !_cntFinal) = if rangeCount == 0 then (0, 0) else goRemainderRanges 0 accAfterBase cntAfterBase
       !base = largest minVal maxVal
       prod0 = maybe 0 P.product base
   in (prod0, acc0)

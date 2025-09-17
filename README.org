@@ -142,8 +142,8 @@ Latest average times per iteration:
 
 | Implementation |    Range | Task     | Time      |
 |----------------+----------+----------+-----------|
-| Haskell        | 100..999 | largest  | 1.1087 ns |
-| Haskell        | 910..999 | smallest | 5.4015 ns |
+| Haskell        | 100..999 | largest  | 1.2707 ns |
+| Haskell        | 910..999 | smallest | 1.4243 ns |
 | Rust           | 100..999 | largest  | 1.3114 µs |
 | Rust           | 910..999 | smallest | 2.8651 µs |
 | Lisp           | 100..999 | largest  | 1.6564 µs |
