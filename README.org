@@ -133,6 +133,24 @@ cd haskell-palindrome
 ./build.sh
 #+END_SRC
 
+Important:
+- The Haskell builds use the LLVM backend and rely on =-fllvm= being present in the
+  =ghc-options= of =haskell-palindrome.cabal=. Cabal is the source of truth for
+  flags; =build.sh= should not need to pass =--ghc-options= redundantly.
+- With LLVM enabled, Haskell performance improved dramatically (4x vs the
+  non-LLVM native backend in our tests).
+- We also use primops in the palindrome predicate; however, the LLVM backend was
+  the dominant factor in the speedup.
+
+LLVM toolchain wiring (one-time):
+- Ensure =llc-19= and =opt-19= are installed and visible in PATH.
+- GHC 9.12.2 may report an empty "LLVM llvm-as command". We set GHC’s assembler
+  driver to =clang= so GHC can pass assembler-style flags:
+  - Edit =$(ghc --print-libdir)/settings= and set: ("LLVM llvm-as command","clang")
+  - Verify via: =ghc --info | grep -i "llvm .*as"=
+  - Confirm with verbose build: look for =opt-19=, =llc-19= and
+    =LLVM assembler: clang= lines.
+
 After these steps, =target-bin/= should contain ten executables:
 - palprod-fast-smallest-inner
 - palprod-fast-largest-inner
@@ -188,9 +206,18 @@ Latest average times per iteration:
 | Golang            | 910..999 | smallest | 3.7567 µs |
 
 * Notes
+- Haskell performance caveat: the Glasgow Haskell Compiler’s native backend was
+  substantially slower for this workload. Enabling the LLVM backend (=-fllvm= via
+  Cabal) yielded about a 4× speedup in our measurements and is required for the
+  results listed above. Ensure your environment is correctly wiring LLVM tools
+  (llc/opt and a working assembler driver) so the LLVM pipeline is actually used.
 - All languages use a numeric half-reversal palindrome check (no strings).
 - The Common Lisp code adds type declarations to encourage fixnum arithmetic in SBCL.
 - We apply pruning (outer and inner) and early exits (for example divisibility by 11 on even-digit products) to reduce calls to the palindrome predicate.
+
+Verification utilities:
+- =test_correctness.sh= cross-checks all server binaries (range 1..999) and
+  asserts identical product/accumulator outputs across languages.
 
 
 * Attribution
