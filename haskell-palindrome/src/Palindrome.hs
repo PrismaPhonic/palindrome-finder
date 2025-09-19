@@ -215,27 +215,27 @@ smallest minVal maxVal
       Nothing -> Nothing
       Just (prod, pairs) -> Just $ Result prod pairs
   where
-    searchSmallest !min' !max' = go min' (maxBound :: Word64)
+    searchSmallest !min' !max' = searchRowsForSmallest min' (maxBound :: Word64)
       where
         -- x ascends; outer prune mirrors Rust: break when x*x >= best
-        go !x !best
+        searchRowsForSmallest !x !best
           | x > max' = if best == maxBound then Nothing else Just (best, collectFactorPairs best min' max')
           | x * x >= best = if best == maxBound then Nothing else Just (best, collectFactorPairs best min' max')
-          | otherwise = case searchRow x best of
-              Nothing -> go (x + 1) best
-              Just newBest -> go (x + 1) newBest
+          | otherwise = case searchRowForSmallest x best of
+              Nothing -> searchRowsForSmallest (x + 1) best
+              Just newBest -> searchRowsForSmallest (x + 1) newBest
           where
-            searchRow !x' !currentBest
+            searchRowForSmallest !x' !currentBest
               | yUpper < x' = Nothing
-              | otherwise = goY x' currentBest
+              | otherwise = searchColumnForSmallest x' currentBest
               where
                 yUpper = min max' ((currentBest - 1) `quot` x')
-                goY !y !rowBest
+                searchColumnForSmallest !y !rowBest
                   | y > yUpper = if rowBest == maxBound then Nothing else Just rowBest
                   | otherwise = let prod = x' * y
                                 in if {-# SCC pal_check_smallest #-} isPalindrome prod
                                      then Just prod
-                                     else goY (y + 1) rowBest
+                                     else searchColumnForSmallest (y + 1) rowBest
 
 -- | Find largest palindromic product
 {-# INLINE largest #-}
@@ -246,30 +246,30 @@ largest minVal maxVal
       Nothing -> Nothing
       Just (prod, pairs) -> Just $ Result prod pairs
   where
-    searchLargest !min' !max' = go max' 0
+    searchLargest !min' !max' = searchRowsForLargest max' 0
       where
         -- x descends; outer prune mirrors Rust: break when x*max <= best
-        go !x !best
+        searchRowsForLargest !x !best
           | x < min' = if best == 0 then Nothing else Just (best, collectFactorPairs best min' max')
           | x * max' <= best = if best == 0 then Nothing else Just (best, collectFactorPairs best min' max')
           | x == 0 = Nothing  -- no valid factors when x == 0; stop
-          | otherwise = case searchRow x of
-              Nothing -> go (x - 1) best
-              Just newBest -> go (x - 1) newBest
+          | otherwise = case searchRowForLargest x of
+              Nothing -> searchRowsForLargest (x - 1) best
+              Just newBest -> searchRowsForLargest (x - 1) newBest
           where
-            searchRow !x'
+            searchRowForLargest !x'
               | x' == 0 = Nothing
               | otherwise =
                   let yLower = max x' ((best `quot` x') + 1)
-                      goY !y !currentBest
+                      searchColumnForLargest !y !currentBest
                         | y < yLower = if currentBest == 0 then Nothing else Just currentBest
                         | otherwise = let prod = x' * y
                                       in if {-# SCC pal_check_largest #-} isPalindrome prod
                                            then Just prod
-                                           else goY (y - 1) currentBest
+                                           else searchColumnForLargest (y - 1) currentBest
                   in if yLower > max'
                        then Nothing
-                       else goY max' 0
+                       else searchColumnForLargest max' 0
 
 -- | Server protocol implementation
 runServer :: (Word64 -> Word64 -> Word64 -> (Word64, Word64)) -> IO ()
