@@ -174,18 +174,18 @@ Latest average times per iteration:
 
 | Implementation    |    Range | Task     | Time      |
 |-------------------+----------+----------+-----------|
+| Haskell           | 100..999 | largest  | 1.6856 µs |
+| Haskell           | 910..999 | smallest | 2.3675 µs |
 | Rust              | 100..999 | largest  | 2.0571 µs |
 | Rust              | 910..999 | smallest | 3.0715 µs |
-| Rust (PGO + Bolt) | 100..999 | largest  | 1.9716 µs |
-| Rust (PGO + Bolt) | 910..999 | smallest | 2.4033 µs |
-| Lisp              | 100..999 | largest  | 2.3833 µs |
-| Lisp              | 910..999 | smallest | 3.4088 µs |
-| Coalton           | 100..999 | largest  | 2.5452 µs |
-| Coalton           | 910..999 | smallest | 3.6807 µs |
-| Golang            | 100..999 | largest  | 2.6557 µs |
-| Golang            | 910..999 | smallest | 3.7728 µs |
-| Haskell           | 100..999 | largest  | 1.6179 µs |
-| Haskell           | 910..999 | smallest | 2.3213 µs |
+| Rust (PGO + Bolt) | 100..999 | largest  | 1.9547 µs |
+| Rust (PGO + Bolt) | 910..999 | smallest | 2.3929 µs |
+| Lisp              | 100..999 | largest  | 2.4202 µs |
+| Lisp              | 910..999 | smallest | 3.5542 µs |
+| Coalton           | 100..999 | largest  | 2.5461 µs |
+| Coalton           | 910..999 | smallest | 3.6468 µs |
+| Golang            | 100..999 | largest  | 2.6442 µs |
+| Golang            | 910..999 | smallest | 3.7567 µs |
 
 * Notes
 - All languages use a numeric half-reversal palindrome check (no strings).
