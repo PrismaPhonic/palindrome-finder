@@ -86,6 +86,8 @@ pub fn benches(c: &mut Criterion) {
     let go_sm = "../target-bin/palprod-go-smallest";
     let haskell_lg = "../target-bin/palprod-haskell-largest";
     let haskell_sm = "../target-bin/palprod-haskell-smallest";
+    let coalton_lg = "../target-bin/palprod-coalton-largest";
+    let coalton_sm = "../target-bin/palprod-coalton-smallest";
 
     bench_servered(c, "FAST   largest 1..999", fast_lg, 1, 999);
     bench_servered(c, "FAST   smallest 1..999", fast_sm, 1, 999);
@@ -101,6 +103,9 @@ pub fn benches(c: &mut Criterion) {
 
     bench_servered(c, "Haskell largest 1..999", haskell_lg, 1, 999);
     bench_servered(c, "Haskell smallest 1..999", haskell_sm, 1, 999);
+
+    bench_servered(c, "Coalton largest 1..999", coalton_lg, 1, 999);
+    bench_servered(c, "Coalton smallest 1..999", coalton_sm, 1, 999);
 }
 
 criterion_group! {

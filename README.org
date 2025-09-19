@@ -17,12 +17,13 @@ Each function returns:
 2. The list of factor pairs that generate it
 
 ** The goal
-We implement and benchmark solutions in Common Lisp (SBCL), Rust, Go, and Haskell.
+We implement and benchmark solutions in Common Lisp (SBCL), Coalton, Rust, Go, and Haskell.
 The objective is to measure performance trade-offs across languages and
 algorithmic optimizations.
 
 * Project layout
 - =lisp/= Common Lisp implementations and build scripts
+- =coalton-palindrome/= Coalton solution binaries and library
 - =rust-palindrome/= Rust solution binaries and library
 - =go-palindrome/= Go solution binaries and library
 - =haskell-palindrome/= Haskell solution binaries and library
@@ -116,6 +117,14 @@ cd go-palindrome
 ./build.sh
 #+END_SRC
 
+** Coalton
+Build the Coalton solution and copy the binaries to =target-bin/=:
+
+#+BEGIN_SRC shell
+cd coalton-palindrome
+./build.sh
+#+END_SRC
+
 ** Haskell
 Build the Haskell solution and copy the binaries to =target-bin/=:
 
@@ -124,13 +133,15 @@ cd haskell-palindrome
 ./build.sh
 #+END_SRC
 
-After these steps, =target-bin/= should contain eight executables:
+After these steps, =target-bin/= should contain ten executables:
 - palprod-fast-smallest-inner
 - palprod-fast-largest-inner
 - palprod-rust-smallest
 - palprod-rust-largest
 - palprod-go-smallest
 - palprod-go-largest
+- palprod-coalton-smallest
+- palprod-coalton-largest
 - palprod-haskell-smallest
 - palprod-haskell-largest
 
@@ -169,6 +180,8 @@ Latest average times per iteration:
 | Rust (PGO + Bolt) | 910..999 | smallest | 2.4033 µs |
 | Lisp              | 100..999 | largest  | 2.3833 µs |
 | Lisp              | 910..999 | smallest | 3.4088 µs |
+| Coalton           | 100..999 | largest  | 2.5452 µs |
+| Coalton           | 910..999 | smallest | 3.6807 µs |
 | Golang            | 100..999 | largest  | 2.6557 µs |
 | Golang            | 910..999 | smallest | 3.7728 µs |
 | Haskell           | 100..999 | largest  | 2.5336 µs |
