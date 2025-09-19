@@ -26,50 +26,18 @@ import Data.Char (toUpper)
 import System.IO (hFlush, stdout)
 import GHC.Exts
   ( Word#
+  , Word64#
   , remWord#
   , quotWord#
   , timesWord#
-  , timesWord2#
   , plusWord#
-  , minusWord#
-  , uncheckedShiftRL#
   , leWord#
-  , ltWord#
   , eqWord#
-  , isTrue#
-  , Word64#
-  , remWord64#
-  , quotWord64#
-  , timesWord64#
-  , plusWord64#
-  , leWord64#
-  , eqWord64#
-  , wordToWord64#
   , word64ToWord#
+  , isTrue#
   )
 import GHC.Word (Word64(..))
 
--- Top-level constants and helpers for fast base-10 div/mod using primops
-{-# INLINE mag10Word# #-}
-mag10Word# :: () -> Word#
-mag10Word# _ = 0xCCCCCCCCCCCCCCCD##
-
-{-# INLINE tenWord# #-}
-tenWord# :: () -> Word#
-tenWord# _ = 10##
-
-{-# INLINE divMod10Word# #-}
-divMod10Word# :: Word# -> (# Word# , Word# #)
-divMod10Word# n# =
-  let (# hi#, _lo# #) = timesWord2# n# (mag10Word# ())
-      q# = uncheckedShiftRL# hi# 3#
-      prod# = timesWord# q# (tenWord# ())
-      r# = minusWord# n# prod#
-  in (# q#, r# #)
-
-{-# INLINE quot10Word# #-}
-quot10Word# :: Word# -> Word#
-quot10Word# n# = case divMod10Word# n# of (# q#, _ #) -> q#
 
 -- | Result type matching Rust's Option<(u64, ArrayVec<u64, 24>)>
 data Result = Result
@@ -136,16 +104,15 @@ isPalindrome n
 {-# INLINE isPalindromePrim #-}
 isPalindromePrim :: Word64 -> Bool
 isPalindromePrim (W64# w0#) =
-  -- Half-reverse using Word# primops with constant-division elimination for /10 and %10
+  -- Half-reverse method using primops for division/modulo
   let loop :: Word# -> Word# -> Bool
       loop m# rev# =
         if isTrue# (leWord# m# rev#)
-          then isTrue# (eqWord# m# rev#) || isTrue# (eqWord# m# (quot10Word# rev#))
+          then isTrue# (eqWord# m# rev#) || isTrue# (eqWord# m# (quotWord# rev# 10##))
           else
-            case divMod10Word# m# of
-              (# q#, digit# #) ->
-                let rev'# = plusWord# (timesWord# rev# (tenWord# ())) digit#
-                in loop q# rev'#
+            let digit# = remWord# m# 10##
+                newRev# = plusWord# (timesWord# rev# 10##) digit#
+            in loop (quotWord# m# 10##) newRev#
 
   in loop (word64ToWord# w0#) 0##
 

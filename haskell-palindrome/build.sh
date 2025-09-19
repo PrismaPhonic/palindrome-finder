@@ -2,9 +2,12 @@
 
 echo "Building Haskell palindrome binaries..."
 
+# Ensure we use ghcup GHC instead of system GHC
+export PATH="$HOME.ghcup/bin:$PATH"
+
 # Run tests first
-echo "Running tests..."
-cabal test --ghc-options="-O2 -funbox-strict-fields -fspec-constr-count=10"
+echo "Running testsources..."
+cabal test
 
 if [ $? -ne 0 ]; then
     echo "Tests failed!"
@@ -12,7 +15,7 @@ if [ $? -ne 0 ]; then
 fi
 
 # Build the library and executables
-cabal build --ghc-options="-O2 -funbox-strict-fields -fspec-constr-count=10"
+cabal build
 
 if [ $? -eq 0 ]; then
     echo "Copying binaries to target-bin directory..."

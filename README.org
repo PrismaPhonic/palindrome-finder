@@ -184,8 +184,8 @@ Latest average times per iteration:
 | Coalton           | 910..999 | smallest | 3.6807 µs |
 | Golang            | 100..999 | largest  | 2.6557 µs |
 | Golang            | 910..999 | smallest | 3.7728 µs |
-| Haskell           | 100..999 | largest  | 2.5336 µs |
-| Haskell           | 910..999 | smallest | 4.0963 µs |
+| Haskell           | 100..999 | largest  | 1.6179 µs |
+| Haskell           | 910..999 | smallest | 2.3213 µs |
 
 * Notes
 - All languages use a numeric half-reversal palindrome check (no strings).

@@ -2,6 +2,9 @@
 
 echo "Running Haskell palindrome tests..."
 
+# Ensure we use ghcup GHC instead of system GHC
+export PATH="$HOME/.ghcup/bin:$PATH"
+
 # Check if ghc is available
 if ! command -v ghc &> /dev/null; then
     echo "Error: GHC not found. Please install GHC to run tests."
