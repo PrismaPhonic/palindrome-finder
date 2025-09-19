@@ -3,7 +3,7 @@
   (:export :main))
 (in-package :pp-runner-fast-largest-inner)
 
-(load "gc.lisp")
+(load "../gc.lisp")
 (load "args.lisp")
 
 (defun %do-iters (min max iters)
@@ -12,7 +12,6 @@
          (cnt 0)
          (current-max max))
     (declare (type fixnum acc cnt current-max))
-    ;; Unique-iteration scheme: cycle current-max from max..min for exactly `iters` steps
     (loop for n fixnum from 0 below iters do
       (multiple-value-bind (p vec) (pp-fast:largest-inner min current-max)
         (when p
@@ -27,7 +26,6 @@
       (setf current-max (if (<= current-max min)
                             max
                             (the fixnum (1- current-max)))))
-    ;; Return the result for the original range and the accumulator
     (multiple-value-bind (p _vec) (pp-fast:largest-inner min max)
       (declare (ignore _vec))
       (values (or p 0) acc))))
@@ -65,3 +63,5 @@
         (multiple-value-bind (min max iters) (pp-args:parse-min-max-iters)
           (pp-gc:prepare-gc-for-bench)
           (format t "~D~%" (%do-iters min max iters))))))
+
+

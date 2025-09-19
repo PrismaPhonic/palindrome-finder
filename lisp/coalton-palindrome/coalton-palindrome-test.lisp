@@ -22,7 +22,7 @@
 If min > max, return NIL (single value) to match error-case expectations."
   (if (> min-factor max-factor)
       nil
-      (let ((prod (coalton-palindrome:smallestProductOrZero min-factor max-factor)))
+      (let ((prod (coalton-palindrome:smallest-product-or-zero min-factor max-factor)))
         (if (zerop prod)
             (values nil nil)
             (values prod t)))))
@@ -32,7 +32,7 @@ If min > max, return NIL (single value) to match error-case expectations."
 If min > max, return NIL (single value) to match error-case expectations."
   (if (> min-factor max-factor)
       nil
-      (let ((prod (coalton-palindrome:largestProductOrZero min-factor max-factor)))
+      (let ((prod (coalton-palindrome:largest-product-or-zero min-factor max-factor)))
         (if (zerop prod)
             (values nil nil)
             (values prod t)))))

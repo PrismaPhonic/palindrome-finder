@@ -343,3 +343,5 @@ This mirrors the smallest optimization and further reduces palindromep calls."
     (if prod
         (values prod (pairs-vector->list vec))
         (values nil nil))))
+
+

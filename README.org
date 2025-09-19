@@ -22,8 +22,9 @@ The objective is to measure performance trade-offs across languages and
 algorithmic optimizations.
 
 * Project layout
-- =lisp/= Common Lisp implementations and build scripts
-- =coalton-palindrome/= Coalton solution binaries and library
+- =lisp/common-lisp/= Common Lisp implementation and build scripts
+- =lisp/coalton-palindrome/= Coalton solution binaries and library
+- =lisp/gc.lisp= Shared garbage collection utilities
 - =rust-palindrome/= Rust solution binaries and library
 - =go-palindrome/= Go solution binaries and library
 - =haskell-palindrome/= Haskell solution binaries and library
@@ -61,31 +62,24 @@ For =N= total iterations across =R= ranges:
 * Build all binaries (Lisp, Rust, Go, then Haskell)
 
 ** Common Lisp (SBCL)
-From the =lisp/= directory, run each build script with SBCL like this:
+From the =lisp/common-lisp/= directory, run the build script:
 
 #+BEGIN_SRC shell
-cd lisp
-
-sbcl --dynamic-space-size 4096 --noinform --disable-debugger --non-interactive \
-     --load build-fast-smallest-inner.lisp
-
-sbcl --dynamic-space-size 4096 --noinform --disable-debugger --non-interactive \
-     --load build-fast-largest-inner.lisp
+cd lisp/common-lisp
+./build.sh
 #+END_SRC
 
-Each command produces executables in =target-bin/=:
+This produces executables in =target-bin/=:
 - palprod-fast-smallest-inner
 - palprod-fast-largest-inner
 
 ** Rust
-Build the Rust solution in release mode, then copy the binaries to =target-bin/=:
+From the =rust-palindrome/= directory, run the build script to produce both
+release and PGO+BOLT-optimized binaries:
 
 #+BEGIN_SRC shell
 cd rust-palindrome
-RUSTFLAGS="-C target-cpu=native" cargo build --release
-
-cp target/release/palprod-rust-smallest ../target-bin/
-cp target/release/palprod-rust-largest  ../target-bin/
+./build.sh
 #+END_SRC
 
 ** Rust (PGO + BOLT via cargo-pgo)
@@ -121,7 +115,7 @@ cd go-palindrome
 Build the Coalton solution and copy the binaries to =target-bin/=:
 
 #+BEGIN_SRC shell
-cd coalton-palindrome
+cd lisp/coalton-palindrome
 ./build.sh
 #+END_SRC
 
@@ -151,11 +145,13 @@ LLVM toolchain wiring (one-time):
   - Confirm with verbose build: look for =opt-19=, =llc-19= and
     =LLVM assembler: clang= lines.
 
-After these steps, =target-bin/= should contain ten executables:
+After these steps, =target-bin/= should contain the executables:
 - palprod-fast-smallest-inner
 - palprod-fast-largest-inner
 - palprod-rust-smallest
 - palprod-rust-largest
+- palprod-rust-smallest-bolt-optimized
+- palprod-rust-largest-bolt-optimized
 - palprod-go-smallest
 - palprod-go-largest
 - palprod-coalton-smallest
@@ -173,6 +169,50 @@ acts like a "server": it performs warmups, then repeated timed runs. By
 amortizing the process startup cost, the measurements reflect only the algorithm
 runtime, not external overhead. This design makes cross-language benchmarking
 much more reliable.
+
+* Run tests
+
+Each language implementation includes a test suite to verify correctness.
+
+** Common Lisp
+From the =lisp/common-lisp/= directory:
+
+#+BEGIN_SRC shell
+cd lisp/common-lisp
+./run-tests.sh
+#+END_SRC
+
+** Coalton
+From the =lisp/coalton-palindrome/= directory:
+
+#+BEGIN_SRC shell
+cd lisp/coalton-palindrome
+./run-tests.sh
+#+END_SRC
+
+** Go
+From the =go-palindrome/= directory:
+
+#+BEGIN_SRC shell
+cd go-palindrome
+./run-tests.sh
+#+END_SRC
+
+** Haskell
+From the =haskell-palindrome/= directory:
+
+#+BEGIN_SRC shell
+cd haskell-palindrome
+./run-tests.sh
+#+END_SRC
+
+** Rust
+From the =rust-palindrome/= directory:
+
+#+BEGIN_SRC shell
+cd rust-palindrome
+cargo test
+#+END_SRC
 
 * Run the Criterion suite
 
