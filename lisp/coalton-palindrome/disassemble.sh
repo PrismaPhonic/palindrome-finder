@@ -22,7 +22,8 @@ mkdir -p "$SCRIPT_DIR/asm"
   --eval "(dolist (kv '((:compiler-mode \"release\") (:perform-specialization t) (:perform-inlining t) (:emit-type-annotations t))) (setf (get ':coalton-config (first kv)) (second kv)))" \
   --eval "(asdf:load-asd \"$SCRIPT_DIR/coalton-palindrome.asd\")" \
   --eval "(asdf:load-system \"coalton-palindrome\")" \
-  --eval "(load \"$REPO_DIR/lisp/fast.lisp\")" \
+  --eval "(asdf:load-asd \"$REPO_DIR/lisp/common-lisp/pp-fast.asd\")" \
+  --eval "(asdf:load-system \"pp-fast\")" \
   --eval "(progn
     (format t \"Disassembling Coalton functions...~%\")
     (with-open-file (s \"$SCRIPT_DIR/asm/coalton-smallest.asm\" :direction :output :if-exists :supersede)
@@ -33,13 +34,13 @@ mkdir -p "$SCRIPT_DIR/asm"
         (disassemble (find-symbol \"LARGEST\" \"COALTON-PALINDROME\"))))
     (with-open-file (s \"$SCRIPT_DIR/asm/coalton-ispal.asm\" :direction :output :if-exists :supersede)
       (let ((*standard-output* s))
-        (disassemble (find-symbol \"ISPAL\" \"COALTON-PALINDROME\"))))
-    (with-open-file (s \"$SCRIPT_DIR/asm/coalton-searchsmallest.asm\" :direction :output :if-exists :supersede)
+        (disassemble (find-symbol \"IS-PAL\" \"COALTON-PALINDROME\"))))
+    (with-open-file (s \"$SCRIPT_DIR/asm/coalton-search-smallest-inlined.asm\" :direction :output :if-exists :supersede)
       (let ((*standard-output* s))
-        (disassemble (find-symbol \"SEARCHSMALLEST\" \"COALTON-PALINDROME\"))))
-    (with-open-file (s \"$SCRIPT_DIR/asm/coalton-searchlargest.asm\" :direction :output :if-exists :supersede)
+        (disassemble (find-symbol \"SEARCH-SMALLEST-INLINED\" \"COALTON-PALINDROME\"))))
+    (with-open-file (s \"$SCRIPT_DIR/asm/coalton-search-largest-inlined.asm\" :direction :output :if-exists :supersede)
       (let ((*standard-output* s))
-        (disassemble (find-symbol \"SEARCHLARGEST\" \"COALTON-PALINDROME\"))))
+        (disassemble (find-symbol \"SEARCH-LARGEST-INLINED\" \"COALTON-PALINDROME\"))))
     (format t \"Disassembling CL functions...~%\")
     (with-open-file (s \"$SCRIPT_DIR/asm/cl-smallest-inner.asm\" :direction :output :if-exists :supersede)
       (let ((*standard-output* s))

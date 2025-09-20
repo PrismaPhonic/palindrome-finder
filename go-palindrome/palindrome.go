@@ -92,24 +92,6 @@ func IsPal(n uint64) bool {
 	return m == rev || m == rev/10
 }
 
-// collectZeroFactorPairs handles the edge case when product == 0.
-// When product == 0 and 0 is in range, valid ordered pairs are (0, y)
-// for all y in [min..max]. Otherwise the set is empty.
-// Returns a flat array [x0, y0, x1, y1, ...] to match the Rust approach.
-//
-//go:inline
-func collectZeroFactorPairs(min, max uint64) []uint64 {
-	var buffer [24]uint64
-	count := 0
-	for y := min; y <= max && count < 24; y++ {
-		buffer[count] = 0
-		count++
-		buffer[count] = y
-		count++
-	}
-	return buffer[:count]
-}
-
 // CollectFactorPairs collects ordered factor pairs (x, y) (with x <= y) such that
 // x * y == product and both factors lie in [min..max].
 // Returns a flat array [x0, y0, x1, y1, ...] to match the Rust approach.
@@ -119,10 +101,6 @@ func collectZeroFactorPairs(min, max uint64) []uint64 {
 //
 //go:inline
 func CollectFactorPairs(product, min, max uint64) []uint64 {
-	if product == 0 {
-		return collectZeroFactorPairs(min, max)
-	}
-
 	// Tight window: x in [ceil(product/max) .. min(max, isqrt(product))]
 	low := maxUint64(min, (product+max-1)/max) // ceil(product/max)
 	high := minUint64(max, fastIsqrt(product))
@@ -160,9 +138,6 @@ func Smallest(min, max uint64) *struct {
 	Product uint64
 	Pairs   []uint64
 } {
-	if min > max {
-		return nil
-	}
 
 	best := ^uint64(0) // equivalent to u64::MAX in Rust
 
@@ -216,9 +191,6 @@ func Largest(min, max uint64) *struct {
 	Product uint64
 	Pairs   []uint64
 } {
-	if min > max {
-		return nil
-	}
 
 	var best uint64 = 0
 
@@ -249,7 +221,7 @@ func Largest(min, max uint64) *struct {
 		}
 	}
 
-	if best > 0 || (min == 0 && max == 0) {
+	if best > 0 {
 		pairs := CollectFactorPairs(best, min, max)
 		return &struct {
 			Product uint64

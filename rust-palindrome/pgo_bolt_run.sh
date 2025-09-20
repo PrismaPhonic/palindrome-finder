@@ -36,7 +36,7 @@ pgo_one() {
   fi
   echo "[PGO] Run workload for $bin"
   cargo pgo run -- --bin "$bin" -- --server <<EOF
-INIT 1 999
+INIT 2 999
 WARMUP $WARMUP
 RUN $ITERS
 QUIT
@@ -59,7 +59,7 @@ bolt_one_with_pgo() {
   INST_PATH="$(find_artifact "$inst_name")"
   if [ -z "${INST_PATH:-}" ]; then echo "ERR: $inst_name not found"; exit 1; fi
   "$INST_PATH" --server <<EOF
-INIT 1 999
+INIT 2 999
 WARMUP $WARMUP
 RUN $ITERS
 QUIT

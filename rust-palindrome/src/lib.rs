@@ -156,24 +156,6 @@ pub fn is_pal(n: u64) -> bool {
 // Factor pair collection
 //
 
-/// When `product == 0` and `0` is in range, valid ordered pairs are `(0, y)`
-/// for all `y in [min..max]`. Otherwise the set is empty.
-///
-/// Returns a flat array [x0, y0, x1, y1, ...] to match the Lisp approach.
-/// The return is somewhat arbitrary. It's possible that if min is 0, and max is huge, that the array vec will need to be larger.
-/// In practice this is a toy problem and it's unlikely anyone would input 0 as a minimum anyways, so this is a somewhat silly edgecase.
-/// We are naively assuming that if someone puts a min of 0, it's to test this edge case, and they probably won't pick a max > 10.
-#[inline]
-fn collect_zero_factor_pairs(min: u64, max: u64) -> ArrayVec<u64, 24> {
-    let mut out = ArrayVec::new_const();
-
-        for y in min..=max {
-            out.push(0);
-            out.push(y);
-        }
-    
-    out
-}
 
 /// Collect ordered factor pairs `(x, y)` (with `x <= y`) such that
 /// `x * y == product` and both factors lie in `[min..max]`.
@@ -183,10 +165,6 @@ fn collect_zero_factor_pairs(min: u64, max: u64) -> ArrayVec<u64, 24> {
 ///   x in [ ceil(product / max) .. min(max, isqrt(product)) ]
 #[inline]
 pub fn collect_factor_pairs(product: u64, min: u64, max: u64) -> ArrayVec<u64, 24> {
-    if product == 0 {
-        return collect_zero_factor_pairs(min, max);
-    }
-
     // Tight window: x in [ceil(product/max) .. min(max, isqrt(product))]
     let low = product.div_ceil(max).max(min);
     let high = product.isqrt().min(max);
@@ -229,9 +207,6 @@ pub fn collect_factor_pairs(product: u64, min: u64, max: u64) -> ArrayVec<u64, 2
 ///   the row minimum; update `best` and continue.
 #[inline]
 pub fn smallest(min: u64, max: u64) -> Option<(u64, ArrayVec<u64, 24>)> {
-    if min > max {
-        return None;
-    }
 
     let mut best = u64::MAX;
 
@@ -280,9 +255,6 @@ pub fn smallest(min: u64, max: u64) -> Option<(u64, ArrayVec<u64, 24>)> {
 ///   is the row maximum; update `best` and continue.
 #[inline]
 pub fn largest(min: u64, max: u64) -> Option<(u64, ArrayVec<u64, 24>)> {
-    if min > max {
-        return None;
-    }
 
     let mut best: u64 = 0;
 
@@ -313,7 +285,7 @@ pub fn largest(min: u64, max: u64) -> Option<(u64, ArrayVec<u64, 24>)> {
         }
     }
 
-    if best > 0 || (min == 0 && max == 0) {
+    if best > 0 {
         Some((best, collect_factor_pairs(best, min, max)))
     } else {
         None
@@ -417,7 +389,11 @@ mod tests {
                 pairs.push((f[i], f[i + 1]));
             }
         }
-        assert_eq!(norm(pairs), norm(expect_factors.to_vec()), "factors mismatch");
+        assert_eq!(
+            norm(pairs),
+            norm(expect_factors.to_vec()),
+            "factors mismatch"
+        );
     }
 
     #[test]

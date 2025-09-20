@@ -6,11 +6,16 @@ This project compares different implementations of the "palindromic products"
 coding challenge, originally from Exercism (https://exercism.org).
 
 ** The problem
-Given a range of integers [min, max], find:
+Given a range of integers [min, max] where min > 0, find:
 - the smallest palindromic product of two factors in that range
 - the largest palindromic product of two factors in that range
 
 A palindromic product is a product whose decimal representation is a palindrome.
+
+** Input constraints
+All implementations require min > 0 (strictly positive inputs only). This constraint
+eliminates edge cases with zero factors and allows for more predictable, optimized
+code paths without special-case branching.
 
 Each function returns:
 1. The palindrome value itself
@@ -232,18 +237,18 @@ Latest average times per iteration:
 
 | Implementation    |    Range | Task     | Time      |
 |-------------------+----------+----------+-----------|
-| Haskell           | 100..999 | largest  | 1.6856 µs |
-| Haskell           | 910..999 | smallest | 2.3675 µs |
-| Rust              | 100..999 | largest  | 2.0571 µs |
-| Rust              | 910..999 | smallest | 3.0715 µs |
-| Rust (PGO + Bolt) | 100..999 | largest  | 1.9547 µs |
-| Rust (PGO + Bolt) | 910..999 | smallest | 2.3929 µs |
-| Lisp              | 100..999 | largest  | 2.4202 µs |
-| Lisp              | 910..999 | smallest | 3.5542 µs |
-| Coalton           | 100..999 | largest  | 2.5461 µs |
-| Coalton           | 910..999 | smallest | 3.6468 µs |
-| Golang            | 100..999 | largest  | 2.6442 µs |
-| Golang            | 910..999 | smallest | 3.7567 µs |
+| Haskell           | 100..999 | largest  | 1.6818 µs |
+| Haskell           | 910..999 | smallest | 2.4438 µs |
+| Rust              | 100..999 | largest  | 1.9775 µs |
+| Rust              | 910..999 | smallest | 3.0078 µs |
+| Rust (PGO + Bolt) | 100..999 | largest  | 1.9326 µs |
+| Rust (PGO + Bolt) | 910..999 | smallest | 2.4347 µs |
+| Lisp              | 100..999 | largest  | 2.2698 µs |
+| Lisp              | 910..999 | smallest | 3.4528 µs |
+| Coalton           | 100..999 | largest  | 2.5939 µs |
+| Coalton           | 910..999 | smallest | 3.6787 µs |
+| Golang            | 100..999 | largest  | 2.5382 µs |
+| Golang            | 910..999 | smallest | 3.8164 µs |
 
 * Notes
 - Haskell performance caveat: the Glasgow Haskell Compiler’s native backend was

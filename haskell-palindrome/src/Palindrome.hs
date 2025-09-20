@@ -1,15 +1,13 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE Strict #-}
-{-# LANGUAGE UnboxedTuples #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE MagicHash #-}
 
 module Palindrome
   ( smallest
   , largest
   , isPalindrome
   , hasEvenDigits
-  , collectFactorPairs
+  , collectPositiveFactorPairs
   , sumUArray
   , Result(..)
   , runServer
@@ -24,18 +22,6 @@ import Data.Maybe (Maybe(..))
 import Data.List (sort)
 import Data.Char (toUpper)
 import System.IO (hFlush, stdout)
-import GHC.Exts
-  ( Word#
-  , Word64#
-  , remWord#
-  , quotWord#
-  , timesWord#
-  , plusWord#
-  , leWord#
-  , eqWord#
-  , word64ToWord#
-  , isTrue#
-  )
 import GHC.Word (Word64(..))
 
 
@@ -99,44 +85,18 @@ isPalindrome n
   | n < 10 = True
   | hasEvenDigits n && n `rem` 11 /= 0 = False  -- even digits must be divisible by 11
   | n `rem` 10 == 0 = False  -- trailing zero
-  | otherwise = isPalindromePrim n
+  | otherwise =
+      -- Half-reverse method
+      let loop :: Word64 -> Word64 -> Bool
+          loop m rev =
+            if m <= rev
+              then m == rev || m == (rev `quot` 10)
+              else
+                let digit = m `rem` 10
+                    newRev = rev * 10 + digit
+                in loop (m `quot` 10) newRev
+      in loop n 0
 
-{-# INLINE isPalindromePrim #-}
-isPalindromePrim :: Word64 -> Bool
-isPalindromePrim (W64# w0#) =
-  -- Half-reverse method using primops for division/modulo
-  let loop :: Word# -> Word# -> Bool
-      loop m# rev# =
-        if isTrue# (leWord# m# rev#)
-          then isTrue# (eqWord# m# rev#) || isTrue# (eqWord# m# (quotWord# rev# 10##))
-          else
-            let digit# = remWord# m# 10##
-                newRev# = plusWord# (timesWord# rev# 10##) digit#
-            in loop (quotWord# m# 10##) newRev#
-
-  in loop (word64ToWord# w0#) 0##
-
--- | Collect factor pairs for a product, returning unboxed array
-{-# INLINE collectFactorPairs #-}
-collectFactorPairs :: Word64 -> Word64 -> Word64 -> UArray Int Word64
-collectFactorPairs product minVal maxVal
-  | product == 0 = collectZeroFactorPairs minVal maxVal
-  | otherwise = collectPositiveFactorPairs product minVal maxVal
-
--- | Collect zero factor pairs (0, y) for y in [min, max]
-{-# INLINE collectZeroFactorPairs #-}
-collectZeroFactorPairs :: Word64 -> Word64 -> UArray Int Word64
-collectZeroFactorPairs minVal maxVal = runST $ do
-  let count = fromIntegral $ 2 * (maxVal - minVal + 1)
-  arr <- newArray (0, count - 1) 0 :: ST s (STUArray s Int Word64)
-  let go !i !y
-        | y > maxVal = return ()
-        | otherwise = do
-            writeArray arr i 0
-            writeArray arr (i + 1) y
-            go (i + 2) (y + 1)
-  go 0 minVal
-  freeze arr
 
 -- | Collect positive factor pairs using tight divisor window
 {-# INLINE collectPositiveFactorPairs #-}
@@ -176,18 +136,16 @@ collectPositiveFactorPairs product minVal maxVal = runST $ do
 -- | Find smallest palindromic product
 {-# INLINE smallest #-}
 smallest :: Word64 -> Word64 -> Maybe Result
-smallest minVal maxVal
-  | minVal > maxVal = Nothing
-  | otherwise = case searchSmallest minVal maxVal of
-      Nothing -> Nothing
-      Just (prod, pairs) -> Just $ Result prod pairs
+smallest minVal maxVal = case searchSmallest minVal maxVal of
+    Nothing -> Nothing
+    Just (prod, pairs) -> Just $ Result prod pairs
   where
     searchSmallest !min' !max' = searchRowsForSmallest min' (maxBound :: Word64)
       where
         -- x ascends; outer prune mirrors Rust: break when x*x >= best
         searchRowsForSmallest !x !best
-          | x > max' = if best == maxBound then Nothing else Just (best, collectFactorPairs best min' max')
-          | x * x >= best = if best == maxBound then Nothing else Just (best, collectFactorPairs best min' max')
+          | x > max' = if best == maxBound then Nothing else Just (best, collectPositiveFactorPairs best min' max')
+          | x * x >= best = if best == maxBound then Nothing else Just (best, collectPositiveFactorPairs best min' max')
           | otherwise = case searchRowForSmallest x best of
               Nothing -> searchRowsForSmallest (x + 1) best
               Just newBest -> searchRowsForSmallest (x + 1) newBest
@@ -200,25 +158,23 @@ smallest minVal maxVal
                 searchColumnForSmallest !y !rowBest
                   | y > yUpper = if rowBest == maxBound then Nothing else Just rowBest
                   | otherwise = let prod = x' * y
-                                in if {-# SCC pal_check_smallest #-} isPalindrome prod
+                                in if isPalindrome prod
                                      then Just prod
                                      else searchColumnForSmallest (y + 1) rowBest
 
 -- | Find largest palindromic product
 {-# INLINE largest #-}
 largest :: Word64 -> Word64 -> Maybe Result
-largest minVal maxVal
-  | minVal > maxVal = Nothing
-  | otherwise = case searchLargest minVal maxVal of
-      Nothing -> Nothing
-      Just (prod, pairs) -> Just $ Result prod pairs
+largest minVal maxVal = case searchLargest minVal maxVal of
+    Nothing -> Nothing
+    Just (prod, pairs) -> Just $ Result prod pairs
   where
     searchLargest !min' !max' = searchRowsForLargest max' 0
       where
         -- x descends; outer prune mirrors Rust: break when x*max <= best
         searchRowsForLargest !x !best
-          | x < min' = if best == 0 then Nothing else Just (best, collectFactorPairs best min' max')
-          | x * max' <= best = if best == 0 then Nothing else Just (best, collectFactorPairs best min' max')
+          | x < min' = if best == 0 then Nothing else Just (best, collectPositiveFactorPairs best min' max')
+          | x * max' <= best = if best == 0 then Nothing else Just (best, collectPositiveFactorPairs best min' max')
           | x == 0 = Nothing  -- no valid factors when x == 0; stop
           | otherwise = case searchRowForLargest x of
               Nothing -> searchRowsForLargest (x - 1) best
@@ -231,7 +187,7 @@ largest minVal maxVal
                       searchColumnForLargest !y !currentBest
                         | y < yLower = if currentBest == 0 then Nothing else Just currentBest
                         | otherwise = let prod = x' * y
-                                      in if {-# SCC pal_check_largest #-} isPalindrome prod
+                                      in if isPalindrome prod
                                            then Just prod
                                            else searchColumnForLargest (y - 1) currentBest
                   in if yLower > max'

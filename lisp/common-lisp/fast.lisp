@@ -46,15 +46,9 @@
  (ftype (function ((simple-array (signed-byte 64) (*)) fixnum)
                   (simple-array (signed-byte 64) (*)))
         finalize-factor-buffer)
- (ftype (function (fixnum fixnum)
-                  (simple-array (signed-byte 64) (*)))
-        collect-zero-factor-pairs)
  (ftype (function (fixnum fixnum fixnum)
                   (simple-array (signed-byte 64) (*)))
         collect-positive-factor-pairs)
- (ftype (function (fixnum fixnum fixnum)
-                  (simple-array (signed-byte 64) (*)))
-        build-factor-pair-vector)
  (ftype (function (fixnum fixnum)
                   (values (or null fixnum)
                           (or null (simple-array (signed-byte 64) (*)))))
@@ -65,9 +59,7 @@
         pairs-vector->list))
 
 (declaim (inline palindromep even-digit-count-p
-                 build-factor-pair-vector
                  finalize-factor-buffer
-                 collect-zero-factor-pairs
                  collect-positive-factor-pairs
                  pairs-vector->list
                  smallest-inner largest-inner))
@@ -139,24 +131,6 @@
 ;; ------------------------------------------------------------------
 ;; Allocation-tight builders for the flat factor-pair vector (unboxed)
 
-(defun collect-zero-factor-pairs (min max)
-  "return all pairs (0,y) for y in [min..max] as a flat sb32 simple-array
-   [x0 y0 x1 y1 ...]. assumes min = 0."
-  (declare (optimize (speed 3) (safety 0) (debug 0))
-           (type fixnum min max))
-  (let* ((pairs (1+ (- max min)))
-         (n     (* 2 pairs))
-         (out   (make-array n :element-type '(signed-byte 64))))
-    (declare (type fixnum pairs n)
-             (type (simple-array (signed-byte 64) (*)) out))
-    (let ((i 0))
-      (declare (type fixnum i))
-      (loop for y of-type fixnum from min to max do
-        (setf (aref out i) 0
-              (aref out (1+ i)) y)
-        (incf i 2)))
-    out))
-
 (defun finalize-factor-buffer (buffer count)
   "Copy the first count entries from buffer (sb32) to a right-sized sb32 result.
 
@@ -195,13 +169,6 @@
                 (aref buff (1+ count)) y)
           (incf count 2))))
     (finalize-factor-buffer buff count)))
-
-(defun build-factor-pair-vector (product min max)
-  "Return a flat vector [x0 y0 x1 y1 ...] (unboxed 32-bit ints)."
-  (declare (type fixnum product min max))
-  (if (zerop product)
-      (collect-zero-factor-pairs min max)
-      (collect-positive-factor-pairs product min max)))
 
 (defun pairs-vector->list (vec)
   "Convert flat vector [x0 y0 x1 y1 ...] to ((x y) ...)."
@@ -244,31 +211,31 @@ Algorithm (ascending x, ascending y with a tight y upper bound):
 This reduces calls to palindromep by shrinking each row as best improves."
   (declare (type fixnum min max))
   (let ((best most-positive-fixnum))
-    (declare (type fixnum best))
-    (block search
-      ;; x ascends
-      (loop for x of-type fixnum from min to max do
-        ;; outer prune: after this, x*x only increases
-        (when (>= (the fixnum (* x x)) best)
-          (return-from search))
-        ;; compute tight y upper bound from current best
-        (let* ((y-upper
-                 (min max (truncate (1- best) x)))) ; floor((best-1)/x)
-          (when (< y-upper x)
-            (return)) ; no possible y in this row
-          (block row
-            ;; y ascends only until y-upper
-            (loop for y of-type fixnum from x to y-upper
-                  for product of-type fixnum
-                    = #+sbcl (sb-ext:truly-the fixnum (* x y))
-                  #-sbcl (* x y) do
-                    (when (palindromep product)
-                      (setf best product)
-                      (return-from row)))))))
-    ;; final answer
-    (if (< best most-positive-fixnum)
-        (values best (build-factor-pair-vector best min max))
-        (values nil nil))))
+     (declare (type fixnum best))
+     (block search
+       ;; x ascends
+       (loop for x of-type fixnum from min to max do
+         ;; outer prune: after this, x*x only increases
+         (when (>= (the fixnum (* x x)) best)
+           (return-from search))
+         ;; compute tight y upper bound from current best
+         (let* ((y-upper
+                  (min max (truncate (1- best) x)))) ; floor((best-1)/x)
+           (when (< y-upper x)
+             (return))                  ; no possible y in this row
+           (block row
+             ;; y ascends only until y-upper
+             (loop for y of-type fixnum from x to y-upper
+                   for product of-type fixnum
+                     = #+sbcl (sb-ext:truly-the fixnum (* x y))
+                   #-sbcl (* x y) do
+                     (when (palindromep product)
+                       (setf best product)
+                       (return-from row)))))))
+     ;; final answer
+     (if (< best most-positive-fixnum)
+         (values best (collect-positive-factor-pairs best min max))
+         (values nil nil))))
 
 ;; ------------------------------
 ;; Largest Search
@@ -318,7 +285,7 @@ This mirrors the smallest optimization and further reduces palindromep calls."
                       (return-from row)))))))
     ;; final answer
     (if (>= best 0)
-        (values best (build-factor-pair-vector best min max))
+        (values best (collect-positive-factor-pairs best min max))
         (values nil nil))))
 
 ;; ------------------------------------------------------------------
@@ -343,5 +310,6 @@ This mirrors the smallest optimization and further reduces palindromep calls."
     (if prod
         (values prod (pairs-vector->list vec))
         (values nil nil))))
+
 
 

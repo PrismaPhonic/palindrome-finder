@@ -89,23 +89,23 @@ pub fn benches(c: &mut Criterion) {
     let coalton_lg = "../target-bin/palprod-coalton-largest";
     let coalton_sm = "../target-bin/palprod-coalton-smallest";
 
-    bench_servered(c, "FAST   largest 1..999", fast_lg, 1, 999);
-    bench_servered(c, "FAST   smallest 1..999", fast_sm, 1, 999);
+    bench_servered(c, "FAST   largest 2..999", fast_lg, 2, 999);
+    bench_servered(c, "FAST   smallest 2..999", fast_sm, 2, 999);
 
-    bench_servered(c, "RUST   largest 1..999", rust_lg, 1, 999);
-    bench_servered(c, "RUST   smallest 1..999", rust_sm, 1, 999);
+    bench_servered(c, "RUST   largest 2..999", rust_lg, 2, 999);
+    bench_servered(c, "RUST   smallest 2..999", rust_sm, 2, 999);
     // If present, also benchmark PGO/BOLT variants
-    if std::path::Path::new(rust_lg_bolt_opt).exists() { bench_servered(c, "RUST+BOLT largest 1..999", rust_lg_bolt_opt, 1, 999); }
-    if std::path::Path::new(rust_sm_bolt_opt).exists() { bench_servered(c, "RUST+BOLT smallest 1..999", rust_sm_bolt_opt, 1, 999); }
+    if std::path::Path::new(rust_lg_bolt_opt).exists() { bench_servered(c, "RUST+BOLT largest 2..999", rust_lg_bolt_opt, 2, 999); }
+    if std::path::Path::new(rust_sm_bolt_opt).exists() { bench_servered(c, "RUST+BOLT smallest 2..999", rust_sm_bolt_opt, 2, 999); }
 
-    bench_servered(c, "GO     largest 1..999", go_lg, 1, 999);
-    bench_servered(c, "GO     smallest 1..999", go_sm, 1, 999);
+    bench_servered(c, "GO     largest 2..999", go_lg, 2, 999);
+    bench_servered(c, "GO     smallest 2..999", go_sm, 2, 999);
 
-    bench_servered(c, "Haskell largest 1..999", haskell_lg, 1, 999);
-    bench_servered(c, "Haskell smallest 1..999", haskell_sm, 1, 999);
+    bench_servered(c, "Haskell largest 2..999", haskell_lg, 2, 999);
+    bench_servered(c, "Haskell smallest 2..999", haskell_sm, 2, 999);
 
-    bench_servered(c, "Coalton largest 1..999", coalton_lg, 1, 999);
-    bench_servered(c, "Coalton smallest 1..999", coalton_sm, 1, 999);
+    bench_servered(c, "Coalton largest 2..999", coalton_lg, 2, 999);
+    bench_servered(c, "Coalton smallest 2..999", coalton_sm, 2, 999);
 }
 
 criterion_group! {

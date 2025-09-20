@@ -1,7 +1,7 @@
 {-# LANGUAGE BangPatterns #-}
 
 import qualified Palindrome as P
-import Palindrome (smallest, largest, isPalindrome, collectFactorPairs, Result(..))
+import Palindrome (smallest, largest, isPalindrome, collectPositiveFactorPairs, Result(..))
 import Data.Word (Word64)
 import Data.Array.Unboxed (elems)
 import Data.List (sort)
