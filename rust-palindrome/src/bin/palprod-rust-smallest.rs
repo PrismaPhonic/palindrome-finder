@@ -7,14 +7,17 @@ fn do_iters(min: u64, max: u64, iters: u64) -> (Option<u64>, u64) {
     let mut counter: u64 = 0;
     let mut current_min = min;
 
-    for _n in 0..iters {
+    for _ in 0..iters {
         if let Some((prod, pairs)) = smallest(current_min, max) {
-            let sum_pairs: u64 = pairs.iter().copied().sum();
-            acc += prod + sum_pairs + counter;
+            acc += prod + counter + pairs.into_iter().sum::<u64>();
             counter += 1;
         }
 
-        current_min = if current_min >= max { min } else { current_min + 1 };
+        current_min = if current_min >= max {
+            min
+        } else {
+            current_min + 1
+        };
     }
 
     let base_prod = smallest(min, max).map(|(p, _)| p);

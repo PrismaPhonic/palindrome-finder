@@ -8,6 +8,8 @@
 
 (load "../gc.lisp")
 
+(declaim (ftype (function (fixnum fixnum fixnum) (values fixnum fixnum)) %do-iters))
+
 (defun %do-iters (min max iters)
   (declare (type fixnum min max iters))
   (let ((result (coalton-palindrome:do-iters-largest min max iters)))

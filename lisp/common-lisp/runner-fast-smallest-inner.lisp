@@ -6,6 +6,8 @@
 (load "../gc.lisp")
 (load "args.lisp")
 
+(declaim (ftype (function (fixnum fixnum fixnum) (values fixnum fixnum)) %do-iters))
+
 (defun %do-iters (min max iters)
   (declare (type fixnum min max iters))
   (let* ((acc 0)
@@ -18,9 +20,7 @@
           (let ((sum 0))
             (declare (type fixnum p sum)
                      (type (simple-array (signed-byte 64) (*)) vec))
-            (loop for i from 0 below (length vec) by 2 do
-              (when (< (1+ i) (length vec))
-                (incf sum (+ (aref vec i) (aref vec (1+ i))))))
+            (setf sum (reduce #'+ vec))
             (incf acc (+ p sum cnt))
             (incf cnt))))
       (setf current-min (if (>= current-min max)
