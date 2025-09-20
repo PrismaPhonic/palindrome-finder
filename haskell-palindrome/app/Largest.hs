@@ -3,7 +3,7 @@
 module Main where
 
 import qualified Palindrome as P
-import Palindrome (largest, runServer, Result(..), sumUArray)
+import Palindrome (largest, runServer, getResult, sumUArray, caseOption)
 import System.Environment (getArgs)
 import Data.Word (Word64)
 import Data.Maybe (maybe)
@@ -27,19 +27,19 @@ doIters minVal maxVal iters =
         | n >= iters = (acc, cnt)
         | otherwise =
             let res = largest minVal currentMax
-                (acc', cnt') = case res of
-                                  Nothing -> (acc, cnt)
-                                  Just r  ->
-                                    let prod = P.product r
-                                        sPairs = sumUArray (P.pairs r)
-                                        !a' = acc + prod + sPairs + cnt
-                                    in (a', cnt + 1)
+                (acc', cnt') = caseOption res
+                  (\prod ->  -- Just case
+                    let result = getResult minVal currentMax prod
+                        sPairs = sumUArray (P.pairs result)
+                        !a' = acc + prod + sPairs + cnt
+                    in (a', cnt + 1))
+                  (acc, cnt)  -- Nothing case
                 nextMax = if currentMax <= minVal then maxVal else currentMax - 1
             in go (n + 1) nextMax acc' cnt'
 
       (!acc0, !_cntFinal) = if rangeCount == 0 then (0, 0) else go 0 maxVal 0 0
       !base = largest minVal maxVal
-      prod0 = maybe 0 P.product base
+      prod0 = caseOption base id 0
   in (prod0, acc0)
 
 

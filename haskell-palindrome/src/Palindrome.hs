@@ -1,6 +1,8 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE Strict #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE UnboxedTuples #-}
+{-# LANGUAGE MagicHash #-}
 
 module Palindrome
   ( smallest
@@ -10,6 +12,10 @@ module Palindrome
   , collectPositiveFactorPairs
   , sumUArray
   , Result(..)
+  , smallestBoxed
+  , largestBoxed
+  , getResult
+  , caseOption
   , runServer
   ) where
 
@@ -24,12 +30,25 @@ import Data.Char (toUpper)
 import System.IO (hFlush, stdout)
 import GHC.Word (Word64(..))
 
+-- | Unboxed Option type - zero-cost abstraction  
+-- Represents Maybe Word64 as (Word64, Bool) where Bool indicates presence
+type UnboxedOption = (Word64, Bool)
 
--- | Result type matching Rust's Option<(u64, ArrayVec<u64, 24>)>
-data Result = Result
-  { product :: !Word64
-  , pairs   :: !(UArray Int Word64)
-  } deriving (Show)
+-- | Constructor for None (unboxed)
+{-# INLINE nothingUnboxed #-}
+nothingUnboxed :: UnboxedOption
+nothingUnboxed = (0, False)
+
+-- | Constructor for Some (unboxed)
+{-# INLINE justUnboxed #-}
+justUnboxed :: Word64 -> UnboxedOption
+justUnboxed x = (x, True)
+
+-- | Pattern matching for unboxed Option
+{-# INLINE caseOption #-}
+caseOption :: UnboxedOption -> (Word64 -> r) -> r -> r
+caseOption (val, present) justCase nothingCase =
+  if present then justCase val else nothingCase
 
 -- | Sum elements of an unboxed array without allocating an intermediate list.
 {-# INLINE sumUArray #-}
@@ -135,64 +154,91 @@ collectPositiveFactorPairs product minVal maxVal = runST $ do
 
 -- | Find smallest palindromic product
 {-# INLINE smallest #-}
-smallest :: Word64 -> Word64 -> Maybe Result
+smallest :: Word64 -> Word64 -> UnboxedOption
 smallest minVal maxVal = case searchSmallest minVal maxVal of
-    Nothing -> Nothing
-    Just (prod, pairs) -> Just $ Result prod pairs
+    (prod, False) -> nothingUnboxed
+    (prod, True) -> justUnboxed prod
   where
     searchSmallest !min' !max' = searchRowsForSmallest min' (maxBound :: Word64)
       where
         -- x ascends; outer prune mirrors Rust: break when x*x >= best
         searchRowsForSmallest !x !best
-          | x > max' = if best == maxBound then Nothing else Just (best, collectPositiveFactorPairs best min' max')
-          | x * x >= best = if best == maxBound then Nothing else Just (best, collectPositiveFactorPairs best min' max')
+          | x > max' = if best == maxBound then nothingUnboxed else justUnboxed best
+          | x * x >= best = if best == maxBound then nothingUnboxed else justUnboxed best
           | otherwise = case searchRowForSmallest x best of
-              Nothing -> searchRowsForSmallest (x + 1) best
-              Just newBest -> searchRowsForSmallest (x + 1) newBest
+              (_, False) -> searchRowsForSmallest (x + 1) best
+              (newBest, True) -> searchRowsForSmallest (x + 1) newBest
           where
             searchRowForSmallest !x' !currentBest
-              | yUpper < x' = Nothing
+              | yUpper < x' = nothingUnboxed
               | otherwise = searchColumnForSmallest x' currentBest
               where
                 yUpper = min max' ((currentBest - 1) `quot` x')
                 searchColumnForSmallest !y !rowBest
-                  | y > yUpper = if rowBest == maxBound then Nothing else Just rowBest
+                  | y > yUpper = if rowBest == maxBound then nothingUnboxed else justUnboxed rowBest
                   | otherwise = let prod = x' * y
                                 in if isPalindrome prod
-                                     then Just prod
+                                     then justUnboxed prod
                                      else searchColumnForSmallest (y + 1) rowBest
 
 -- | Find largest palindromic product
 {-# INLINE largest #-}
-largest :: Word64 -> Word64 -> Maybe Result
+largest :: Word64 -> Word64 -> UnboxedOption
 largest minVal maxVal = case searchLargest minVal maxVal of
-    Nothing -> Nothing
-    Just (prod, pairs) -> Just $ Result prod pairs
+    (prod, False) -> nothingUnboxed
+    (prod, True) -> justUnboxed prod
   where
     searchLargest !min' !max' = searchRowsForLargest max' 0
       where
         -- x descends; outer prune mirrors Rust: break when x*max <= best
         searchRowsForLargest !x !best
-          | x < min' = if best == 0 then Nothing else Just (best, collectPositiveFactorPairs best min' max')
-          | x * max' <= best = if best == 0 then Nothing else Just (best, collectPositiveFactorPairs best min' max')
-          | x == 0 = Nothing  -- no valid factors when x == 0; stop
+          | x < min' = if best == 0 then nothingUnboxed else justUnboxed best
+          | x * max' <= best = if best == 0 then nothingUnboxed else justUnboxed best
+          | x == 0 = nothingUnboxed  -- no valid factors when x == 0; stop
           | otherwise = case searchRowForLargest x of
-              Nothing -> searchRowsForLargest (x - 1) best
-              Just newBest -> searchRowsForLargest (x - 1) newBest
+              (_, False) -> searchRowsForLargest (x - 1) best
+              (newBest, True) -> searchRowsForLargest (x - 1) newBest
           where
             searchRowForLargest !x'
-              | x' == 0 = Nothing
+              | x' == 0 = nothingUnboxed
               | otherwise =
                   let yLower = max x' ((best `quot` x') + 1)
                       searchColumnForLargest !y !currentBest
-                        | y < yLower = if currentBest == 0 then Nothing else Just currentBest
+                        | y < yLower = if currentBest == 0 then nothingUnboxed else justUnboxed currentBest
                         | otherwise = let prod = x' * y
                                       in if isPalindrome prod
-                                           then Just prod
+                                           then justUnboxed prod
                                            else searchColumnForLargest (y - 1) currentBest
                   in if yLower > max'
-                       then Nothing
+                       then nothingUnboxed
                        else searchColumnForLargest max' 0
+
+-- | Get result with factor pairs (unboxed version)
+{-# INLINE getResult #-}
+getResult :: Word64 -> Word64 -> Word64 -> Result
+getResult minVal maxVal prod = Result prod (collectPositiveFactorPairs prod minVal maxVal)
+
+-- | Convert unboxed option to Maybe for compatibility
+{-# INLINE toMaybe #-}
+toMaybe :: UnboxedOption -> Maybe Word64
+toMaybe (val, present) = if present then Just val else Nothing
+
+-- | Legacy Result type for compatibility
+data Result = Result
+  { product :: !Word64
+  , pairs   :: !(UArray Int Word64)
+  } deriving (Show)
+
+-- | Wrapper functions for backward compatibility
+smallestBoxed :: Word64 -> Word64 -> Maybe Result
+smallestBoxed minVal maxVal = case smallest minVal maxVal of
+  (prod, False) -> Nothing
+  (prod, True) -> Just $ getResult minVal maxVal prod
+
+largestBoxed :: Word64 -> Word64 -> Maybe Result
+largestBoxed minVal maxVal = case largest minVal maxVal of
+  (prod, False) -> Nothing
+  (prod, True) -> Just $ getResult minVal maxVal prod
 
 -- | Server protocol implementation
 runServer :: (Word64 -> Word64 -> Word64 -> (Word64, Word64)) -> IO ()

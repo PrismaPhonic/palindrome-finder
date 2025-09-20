@@ -237,8 +237,8 @@ Latest average times per iteration:
 
 | Implementation    |    Range | Task     | Time      |
 |-------------------+----------+----------+-----------|
-| Haskell           | 100..999 | largest  | 1.6818 µs |
-| Haskell           | 910..999 | smallest | 2.4438 µs |
+| Haskell           | 100..999 | largest  | 1.6258 µs |
+| Haskell           | 910..999 | smallest | 2.4386 µs |
 | Rust              | 100..999 | largest  | 1.9775 µs |
 | Rust              | 910..999 | smallest | 3.0078 µs |
 | Rust (PGO + Bolt) | 100..999 | largest  | 1.9326 µs |

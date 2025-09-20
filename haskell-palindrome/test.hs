@@ -1,4 +1,4 @@
-import Palindrome (smallest, largest, isPalindrome)
+import Palindrome (smallestBoxed, largestBoxed, isPalindrome)
 import Data.Word (Word64)
 
 main :: IO ()
@@ -15,18 +15,18 @@ main = do
     
     -- Test smallest
     putStrLn "\nTesting smallest:"
-    putStrLn $ "smallest 910 999: " ++ show (smallest 910 999)
-    putStrLn $ "smallest 100 999: " ++ show (smallest 100 999)
-    putStrLn $ "smallest 1 9: " ++ show (smallest 1 9)
-    putStrLn $ "smallest 10 99: " ++ show (smallest 10 99)
-    putStrLn $ "smallest 1000 9999: " ++ show (smallest 1000 9999)
+    putStrLn $ "smallestBoxed 910 999: " ++ show (smallestBoxed 910 999)
+    putStrLn $ "smallestBoxed 100 999: " ++ show (smallestBoxed 100 999)
+    putStrLn $ "smallestBoxed 1 9: " ++ show (smallestBoxed 1 9)
+    putStrLn $ "smallestBoxed 10 99: " ++ show (smallestBoxed 10 99)
+    putStrLn $ "smallestBoxed 1000 9999: " ++ show (smallestBoxed 1000 9999)
     
     -- Test largest
     putStrLn "\nTesting largest:"
-    putStrLn $ "largest 910 999: " ++ show (largest 910 999)
-    putStrLn $ "largest 100 999: " ++ show (largest 100 999)
-    putStrLn $ "largest 1 9: " ++ show (largest 1 9)
-    putStrLn $ "largest 10 99: " ++ show (largest 10 99)
-    putStrLn $ "largest 1000 9999: " ++ show (largest 1000 9999)
+    putStrLn $ "largestBoxed 910 999: " ++ show (largestBoxed 910 999)
+    putStrLn $ "largestBoxed 100 999: " ++ show (largestBoxed 100 999)
+    putStrLn $ "largestBoxed 1 9: " ++ show (largestBoxed 1 9)
+    putStrLn $ "largestBoxed 10 99: " ++ show (largestBoxed 10 99)
+    putStrLn $ "largestBoxed 1000 9999: " ++ show (largestBoxed 1000 9999)
     
     putStrLn "\nAll tests completed!"

@@ -1,7 +1,7 @@
 {-# LANGUAGE BangPatterns #-}
 
 import qualified Palindrome as P
-import Palindrome (smallest, largest, isPalindrome, collectPositiveFactorPairs, Result(..))
+import Palindrome (smallestBoxed, largestBoxed, isPalindrome, collectPositiveFactorPairs, Result(..))
 import Data.Word (Word64)
 import Data.Array.Unboxed (elems)
 import Data.List (sort)
@@ -33,7 +33,7 @@ assertSomeEq got expectP expectFactors = do
 -- Test functions matching Rust exactly
 testSmallest :: IO ()
 testSmallest = do
-    let result = smallest 910 999
+    let result = smallestBoxed 910 999
     case result of
         Nothing -> error "expected Some(..), got None"
         Just r -> do
@@ -53,7 +53,7 @@ testSmallest = do
 
 largest910_999 :: IO ()
 largest910_999 = do
-    let result = largest 910 999
+    let result = largestBoxed 910 999
     case result of
         Nothing -> error "expected Some(..), got None"
         Just r -> do
@@ -68,7 +68,7 @@ largest910_999 = do
 
 largest100_999 :: IO ()
 largest100_999 = do
-    let result = largest 100 999
+    let result = largestBoxed 100 999
     case result of
         Nothing -> error "expected Some(..), got None"
         Just r -> do
@@ -119,7 +119,7 @@ oddLengthPal = do
 
 findSmallestPalindromeFromSingleDigitFactors :: IO ()
 findSmallestPalindromeFromSingleDigitFactors = do
-    let result = smallest 1 9
+    let result = smallestBoxed 1 9
     case result of
         Nothing -> error "expected Some(..), got None"
         Just r -> do
@@ -133,7 +133,7 @@ findSmallestPalindromeFromSingleDigitFactors = do
 
 findLargestPalindromeFromSingleDigitFactors :: IO ()
 findLargestPalindromeFromSingleDigitFactors = do
-    let result = largest 1 9
+    let result = largestBoxed 1 9
     case result of
         Nothing -> error "expected Some(..), got None"
         Just r -> do
@@ -147,7 +147,7 @@ findLargestPalindromeFromSingleDigitFactors = do
 
 findSmallestPalindromeFromDoubleDigitFactors :: IO ()
 findSmallestPalindromeFromDoubleDigitFactors = do
-    let result = smallest 10 99
+    let result = smallestBoxed 10 99
     case result of
         Nothing -> error "expected Some(..), got None"
         Just r -> do
@@ -161,7 +161,7 @@ findSmallestPalindromeFromDoubleDigitFactors = do
 
 findLargestPalindromeFromDoubleDigitFactors :: IO ()
 findLargestPalindromeFromDoubleDigitFactors = do
-    let result = largest 10 99
+    let result = largestBoxed 10 99
     case result of
         Nothing -> error "expected Some(..), got None"
         Just r -> do
@@ -175,7 +175,7 @@ findLargestPalindromeFromDoubleDigitFactors = do
 
 findSmallestPalindromeFromTripleDigitFactors :: IO ()
 findSmallestPalindromeFromTripleDigitFactors = do
-    let result = smallest 100 999
+    let result = smallestBoxed 100 999
     case result of
         Nothing -> error "expected Some(..), got None"
         Just r -> do
@@ -189,7 +189,7 @@ findSmallestPalindromeFromTripleDigitFactors = do
 
 findLargestPalindromeFromTripleDigitFactors :: IO ()
 findLargestPalindromeFromTripleDigitFactors = do
-    let result = largest 100 999
+    let result = largestBoxed 100 999
     case result of
         Nothing -> error "expected Some(..), got None"
         Just r -> do
@@ -203,7 +203,7 @@ findLargestPalindromeFromTripleDigitFactors = do
 
 findSmallestPalindromeFromFourDigitFactors :: IO ()
 findSmallestPalindromeFromFourDigitFactors = do
-    let result = smallest 1000 9999
+    let result = smallestBoxed 1000 9999
     case result of
         Nothing -> error "expected Some(..), got None"
         Just r -> do
@@ -217,7 +217,7 @@ findSmallestPalindromeFromFourDigitFactors = do
 
 findLargestPalindromeFromFourDigitFactors :: IO ()
 findLargestPalindromeFromFourDigitFactors = do
-    let result = largest 1000 9999
+    let result = largestBoxed 1000 9999
     case result of
         Nothing -> error "expected Some(..), got None"
         Just r -> do
@@ -231,35 +231,35 @@ findLargestPalindromeFromFourDigitFactors = do
 
 emptyResultForSmallestIfNoPalindromeInTheRange :: IO ()
 emptyResultForSmallestIfNoPalindromeInTheRange = do
-    let result = smallest 1002 1003
+    let result = smallestBoxed 1002 1003
     case result of
         Nothing -> putStrLn "✓ empty_result_for_smallest_if_no_palindrome_in_the_range passed"
         Just _ -> error "expected None, got Some(..)"
 
 emptyResultForLargestIfNoPalindromeInTheRange :: IO ()
 emptyResultForLargestIfNoPalindromeInTheRange = do
-    let result = largest 15 15
+    let result = largestBoxed 15 15
     case result of
         Nothing -> putStrLn "✓ empty_result_for_largest_if_no_palindrome_in_the_range passed"
         Just _ -> error "expected None, got Some(..)"
 
 errorResultForSmallestIfMinIsMoreThanMax :: IO ()
 errorResultForSmallestIfMinIsMoreThanMax = do
-    let result = smallest 10000 1
+    let result = smallestBoxed 10000 1
     case result of
         Nothing -> putStrLn "✓ error_result_for_smallest_if_min_is_more_than_max passed"
         Just _ -> error "expected None, got Some(..)"
 
 errorResultForLargestIfMinIsMoreThanMax :: IO ()
 errorResultForLargestIfMinIsMoreThanMax = do
-    let result = largest 2 1
+    let result = largestBoxed 2 1
     case result of
         Nothing -> putStrLn "✓ error_result_for_largest_if_min_is_more_than_max passed"
         Just _ -> error "expected None, got Some(..)"
 
 smallestProductDoesNotUseTheSmallestFactor :: IO ()
 smallestProductDoesNotUseTheSmallestFactor = do
-    let result = smallest 3215 4000
+    let result = smallestBoxed 3215 4000
     case result of
         Nothing -> error "expected Some(..), got None"
         Just r -> do
