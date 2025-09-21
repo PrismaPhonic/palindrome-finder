@@ -16,9 +16,8 @@ import (
 // We use this to apply the rule "even-length palindromes must be divisible by 11".
 //
 //go:inline
-func hasEvenDigits(n uint64) bool {
-	// Use bit manipulation to count digits efficiently
-	// This avoids floating point and reduces the number of comparisons
+func hasEvenDigits(n uint32) bool {
+	// Use comparisons to count digits efficiently (capped to 10 digits for uint32)
 	if n < 100 {
 		return true // 2 digits
 	} else if n < 1_000 {
@@ -35,26 +34,8 @@ func hasEvenDigits(n uint64) bool {
 		return true // 8 digits
 	} else if n < 1_000_000_000 {
 		return false // 9 digits
-	} else if n < 10_000_000_000 {
-		return true // 10 digits
-	} else if n < 100_000_000_000 {
-		return false // 11 digits
-	} else if n < 1_000_000_000_000 {
-		return true // 12 digits
-	} else if n < 10_000_000_000_000 {
-		return false // 13 digits
-	} else if n < 100_000_000_000_000 {
-		return true // 14 digits
-	} else if n < 1_000_000_000_000_000 {
-		return false // 15 digits
-	} else if n < 10_000_000_000_000_000 {
-		return true // 16 digits
-	} else if n < 100_000_000_000_000_000 {
-		return false // 17 digits
-	} else if n < 1_000_000_000_000_000_000 {
-		return true // 18 digits
 	} else {
-		return false // 19+ digits
+		return true // 10 digits (max for uint32)
 	}
 }
 
@@ -68,7 +49,7 @@ func hasEvenDigits(n uint64) bool {
 // - Then return m == rev || m == rev/10.
 //
 //go:inline
-func IsPal(n uint64) bool {
+func IsPal(n uint32) bool {
 	if n < 10 {
 		return true
 	}
@@ -83,7 +64,7 @@ func IsPal(n uint64) bool {
 
 	// Half-reverse
 	m := n
-	var rev uint64 = 0
+	var rev uint32 = 0
 	for m > rev {
 		rev = rev*10 + m%10
 		m /= 10
@@ -100,15 +81,15 @@ func IsPal(n uint64) bool {
 //	x in [ ceil(product / max) .. min(max, isqrt(product)) ]
 //
 //go:inline
-func CollectFactorPairs(product, min, max uint64) []uint64 {
+func CollectFactorPairs(product, min, max uint32) []uint32 {
 	// Tight window: x in [ceil(product/max) .. min(max, isqrt(product))]
-	low := maxUint64(min, (product+max-1)/max) // ceil(product/max)
-	high := minUint64(max, fastIsqrt(product))
+	low := maxUint32(min, (product+max-1)/max) // ceil(product/max)
+	high := minUint32(max, fastIsqrt(product))
 
-	// Use fixed-size buffer with running count
-	var buffer [24]uint64
+	// Use fixed-size buffer with running count (4 elements = 2 pairs)
+	var buffer [4]uint32
 	count := 0
-	for x := low; x <= high && count < 24; x++ {
+	for x := low; x <= high && count < 4; x++ {
 		if product%x == 0 {
 			y := product / x
 			buffer[count] = x
@@ -134,12 +115,12 @@ func CollectFactorPairs(product, min, max uint64) []uint64 {
 //     the row minimum; update best and continue.
 //
 //go:inline
-func Smallest(min, max uint64) *struct {
-	Product uint64
-	Pairs   []uint64
+func Smallest(min, max uint32) *struct {
+	Product uint32
+	Pairs   []uint32
 } {
 
-	best := ^uint64(0) // equivalent to u64::MAX in Rust
+	best := ^uint32(0) // equivalent to u32::MAX in Rust
 
 	for x := min; x <= max; x++ {
 		if x*x >= best {
@@ -147,7 +128,7 @@ func Smallest(min, max uint64) *struct {
 		}
 
 		// Row cap: only products < best matter.
-		yUpper := minUint64(max, (best-1)/x)
+		yUpper := minUint32(max, (best-1)/x)
 		if yUpper < x {
 			continue // no valid y in this row
 		}
@@ -162,13 +143,13 @@ func Smallest(min, max uint64) *struct {
 		}
 	}
 
-	if best == ^uint64(0) {
+	if best == ^uint32(0) {
 		return nil
 	} else {
 		pairs := CollectFactorPairs(best, min, max)
 		return &struct {
-			Product uint64
-			Pairs   []uint64
+			Product uint32
+			Pairs   []uint32
 		}{Product: best, Pairs: pairs}
 	}
 }
@@ -187,12 +168,12 @@ func Smallest(min, max uint64) *struct {
 //     is the row maximum; update best and continue.
 //
 //go:inline
-func Largest(min, max uint64) *struct {
-	Product uint64
-	Pairs   []uint64
+func Largest(min, max uint32) *struct {
+	Product uint32
+	Pairs   []uint32
 } {
 
-	var best uint64 = 0
+	var best uint32 = 0
 
 	// x descends
 	for x := max; x >= min; x-- {
@@ -201,12 +182,8 @@ func Largest(min, max uint64) *struct {
 			break
 		}
 
-		if x == 0 {
-			continue // row cannot beat best > 0
-		}
-
 		// y lower bound: only products > best matter; also enforce y >= x.
-		yLower := maxUint64(x, (best/x)+1)
+		yLower := maxUint32(x, (best/x)+1)
 
 		if yLower > max {
 			continue // no work for this row
@@ -224,8 +201,8 @@ func Largest(min, max uint64) *struct {
 	if best > 0 {
 		pairs := CollectFactorPairs(best, min, max)
 		return &struct {
-			Product uint64
-			Pairs   []uint64
+			Product uint32
+			Pairs   []uint32
 		}{Product: best, Pairs: pairs}
 	} else {
 		return nil
@@ -241,13 +218,13 @@ func Largest(min, max uint64) *struct {
 //   - QUIT: exit.
 //
 // The doIters function must do the full work (including
-// factor pair building) and return the final product as (uint64, bool).
-func RunServer(doIters func(uint64, uint64, uint64) (uint64, uint64)) {
+// factor pair building) and return the final product as (uint32, uint32).
+func RunServer(doIters func(uint32, uint32, uint32) (uint32, uint32)) {
 	reader := bufio.NewReader(os.Stdin)
 	writer := bufio.NewWriter(os.Stdout)
 	defer writer.Flush()
 
-	var min, max *uint64
+	var min, max *uint32
 
 	for {
 		line, err := reader.ReadString('\n')
@@ -271,13 +248,15 @@ func RunServer(doIters func(uint64, uint64, uint64) (uint64, uint64)) {
 				writer.Flush()
 				continue
 			}
-			a, err1 := strconv.ParseUint(parts[1], 10, 64)
-			b, err2 := strconv.ParseUint(parts[2], 10, 64)
+			a64, err1 := strconv.ParseUint(parts[1], 10, 32)
+			b64, err2 := strconv.ParseUint(parts[2], 10, 32)
 			if err1 != nil || err2 != nil {
 				fmt.Fprintln(writer, "ERR BADARGS")
 				writer.Flush()
 				continue
 			}
+			a := uint32(a64)
+			b := uint32(b64)
 			min = &a
 			max = &b
 			fmt.Fprintln(writer, "OK")
@@ -289,12 +268,13 @@ func RunServer(doIters func(uint64, uint64, uint64) (uint64, uint64)) {
 				writer.Flush()
 				continue
 			}
-			iters, err := strconv.ParseUint(parts[1], 10, 64)
+			iters64, err := strconv.ParseUint(parts[1], 10, 32)
 			if err != nil {
 				fmt.Fprintln(writer, "ERR BADARGS")
 				writer.Flush()
 				continue
 			}
+			iters := uint32(iters64)
 			if min != nil && max != nil {
 				_, _ = doIters(*min, *max, iters)
 			}
@@ -307,12 +287,13 @@ func RunServer(doIters func(uint64, uint64, uint64) (uint64, uint64)) {
 				writer.Flush()
 				continue
 			}
-			iters, err := strconv.ParseUint(parts[1], 10, 64)
+			iters64, err := strconv.ParseUint(parts[1], 10, 32)
 			if err != nil {
 				fmt.Fprintln(writer, "ERR BADARGS")
 				writer.Flush()
 				continue
 			}
+			iters := uint32(iters64)
 			if min != nil && max != nil {
 				prod, acc := doIters(*min, *max, iters)
 				fmt.Fprintf(writer, "OK %d %d\n", prod, acc)
@@ -334,7 +315,7 @@ func RunServer(doIters func(uint64, uint64, uint64) (uint64, uint64)) {
 // fastIsqrt computes the integer square root using Newton's method with bit manipulation
 //
 //go:inline
-func fastIsqrt(n uint64) uint64 {
+func fastIsqrt(n uint32) uint32 {
 	if n < 2 {
 		return n
 	}
@@ -352,10 +333,10 @@ func fastIsqrt(n uint64) uint64 {
 	return x
 }
 
-// Helper functions for min/max since Go doesn't have built-in ones for uint64
+// Helper functions for min/max since Go doesn't have built-in ones for uint32
 //
 //go:inline
-func minUint64(a, b uint64) uint64 {
+func minUint32(a, b uint32) uint32 {
 	if a < b {
 		return a
 	}
@@ -365,7 +346,7 @@ func minUint64(a, b uint64) uint64 {
 
 //
 //go:inline
-func maxUint64(a, b uint64) uint64 {
+func maxUint32(a, b uint32) uint32 {
 	if a > b {
 		return a
 	}

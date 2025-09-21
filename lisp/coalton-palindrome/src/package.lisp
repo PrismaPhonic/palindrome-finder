@@ -16,6 +16,8 @@
    #:collect-factor-pairs
    #:smallest
    #:largest
+   #:smallest-search
+   #:largest-search
    #:sum-pairs
    #:do-iters-largest
    #:do-iters-smallest

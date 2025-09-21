@@ -6,26 +6,30 @@
 (load "../gc.lisp")
 (load "args.lisp")
 
-(declaim (ftype (function (fixnum fixnum fixnum) (values fixnum fixnum)) %do-iters))
+(declaim (ftype (function (pp-fast::word32 pp-fast::word32 pp-fast::word32)
+                          (values pp-fast::word32 (unsigned-byte 64)))
+                %do-iters))
 
 (defun %do-iters (min max iters)
-  (declare (type fixnum min max iters))
+  (declare (type pp-fast::word32 min max iters))
   (let* ((acc 0)
          (cnt 0)
          (current-max max))
-    (declare (type fixnum acc cnt current-max))
-    (loop for n fixnum from 0 below iters do
+    (declare (type (unsigned-byte 64) acc cnt)
+             (type pp-fast::word32 current-max))
+    (loop for n of-type pp-fast::word32 from 0 below iters do
       (multiple-value-bind (p vec) (pp-fast:largest-inner min current-max)
         (when p
           (let ((sum 0))
-            (declare (type fixnum p sum)
-                     (type (simple-array (signed-byte 64) (*)) vec))
+            (declare (type (unsigned-byte 64) sum)
+                     (type (simple-array (unsigned-byte 32) (*)) vec)
+                     (type pp-fast::word32 p))
             (setf sum (reduce #'+ vec))
-            (incf acc (+ p sum cnt))
+            (incf acc (+ sum p cnt))
             (incf cnt))))
       (setf current-max (if (<= current-max min)
                             max
-                            (the fixnum (1- current-max)))))
+                            (the pp-fast::word32 (1- current-max)))))
     (multiple-value-bind (p _vec) (pp-fast:largest-inner min max)
       (declare (ignore _vec))
       (values (or p 0) acc))))

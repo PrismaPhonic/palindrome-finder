@@ -9,7 +9,7 @@ use arrayvec::ArrayVec;
 /// Functional recursive palindrome check using half-reverse method
 /// Mirrors the Haskell `isPalindrome` function with recursive `loop`
 #[inline(always)]
-pub fn is_pal_functional(n: u64) -> bool {
+pub fn is_pal_functional(n: u32) -> bool {
     if n < 10 {
         return true;
     }
@@ -27,7 +27,7 @@ pub fn is_pal_functional(n: u64) -> bool {
 }
 
 #[inline(always)]
-fn half_reverse_loop(m: u64, rev: u64) -> bool {
+fn half_reverse_loop(m: u32, rev: u32) -> bool {
     if m <= rev {
         m == rev || m == rev / 10
     } else {
@@ -40,7 +40,7 @@ fn half_reverse_loop(m: u64, rev: u64) -> bool {
 /// Returns true if `n` has an even number of decimal digits.
 /// Mirrors the original `has_even_digits` function.
 #[inline(always)]
-fn has_even_digits(n: u64) -> bool {
+fn has_even_digits(n: u32) -> bool {
     debug_assert!(n >= 11);
 
     // Use bit manipulation to count digits efficiently
@@ -61,50 +61,34 @@ fn has_even_digits(n: u64) -> bool {
         true // 8 digits
     } else if n < 1_000_000_000 {
         false // 9 digits
-    } else if n < 10_000_000_000 {
-        true // 10 digits
-    } else if n < 100_000_000_000 {
-        false // 11 digits
-    } else if n < 1_000_000_000_000 {
-        true // 12 digits
-    } else if n < 10_000_000_000_000 {
-        false // 13 digits
-    } else if n < 100_000_000_000_000 {
-        true // 14 digits
-    } else if n < 1_000_000_000_000_000 {
-        false // 15 digits
-    } else if n < 10_000_000_000_000_000 {
-        true // 16 digits
-    } else if n < 100_000_000_000_000_000 {
-        false // 17 digits
-    } else if n < 1_000_000_000_000_000_000 {
-        true // 18 digits
     } else {
-        false // 19+ digits
+        true // 10 digits (max for u32)
     }
 }
 
 /// Functional recursive factor pair collection
 /// Mirrors the Haskell `collectPositiveFactorPairs` function
 #[inline(always)]
-pub fn collect_factor_pairs(product: u64, min: u64, max: u64) -> ArrayVec<u64, 24> {
+pub fn collect_factor_pairs(product: u32, min: u32, max: u32) -> ArrayVec<u32, 4> {
     let sqrt_p = product.isqrt();
     let low = product.div_ceil(max).max(min);
     let high = sqrt_p.min(max);
 
-    let mut result = ArrayVec::new_const();
+    // Verified for bounds [1, 999] inclusive (both smallest and largest):
+    // the factor-pair list never exceeds 4 slots (2 pairs).
+    let mut result: ArrayVec<u32, 4> = ArrayVec::new_const();
     collect_pairs_recursive(product, min, max, low, high, &mut result);
     result
 }
 
 #[inline(always)]
 fn collect_pairs_recursive(
-    product: u64,
-    min: u64,
-    max: u64,
-    x: u64,
-    high: u64,
-    result: &mut ArrayVec<u64, 24>,
+    product: u32,
+    min: u32,
+    max: u32,
+    x: u32,
+    high: u32,
+    result: &mut ArrayVec<u32, 4>,
 ) {
     if x > high {
         return;
@@ -120,21 +104,21 @@ fn collect_pairs_recursive(
 }
 
 #[inline(always)]
-pub fn smallest_functional(min: u64, max: u64) -> Option<(u64, ArrayVec<u64, 24>)> {
+pub fn smallest_functional(min: u32, max: u32) -> Option<(u32, ArrayVec<u32, 4>)> {
     // Start row search at x = min with sentinel best
-    search_smallest(min, u64::MAX, min, max)
+    search_smallest(min, u32::MAX, min, max)
 }
 
 #[inline(always)]
 fn search_smallest(
-    x: u64,
-    best: u64,
-    min_bound: u64,
-    max_bound: u64,
-) -> Option<(u64, ArrayVec<u64, 24>)> {
+    x: u32,
+    best: u32,
+    min_bound: u32,
+    max_bound: u32,
+) -> Option<(u32, ArrayVec<u32, 4>)> {
     // Mirrors Haskell's searchRowsForSmallest with x ascending and pruning
     if x > max_bound || x * x >= best {
-        if best == u64::MAX {
+        if best == u32::MAX {
             None
         } else {
             Some((best, collect_factor_pairs(best, min_bound, max_bound)))
@@ -148,7 +132,7 @@ fn search_smallest(
 }
 
 #[inline(always)]
-fn search_row_smallest(x: u64, current_best: u64, max: u64) -> Option<u64> {
+fn search_row_smallest(x: u32, current_best: u32, max: u32) -> Option<u32> {
     let y_upper = ((current_best - 1) / x).min(max);
     if y_upper < x {
         None
@@ -158,9 +142,9 @@ fn search_row_smallest(x: u64, current_best: u64, max: u64) -> Option<u64> {
 }
 
 #[inline(always)]
-fn search_column_smallest(x: u64, y: u64, y_upper: u64, current_best: u64) -> Option<u64> {
+fn search_column_smallest(x: u32, y: u32, y_upper: u32, current_best: u32) -> Option<u32> {
     if y > y_upper {
-        if current_best == u64::MAX {
+        if current_best == u32::MAX {
             None
         } else {
             Some(current_best)
@@ -178,21 +162,19 @@ fn search_column_smallest(x: u64, y: u64, y_upper: u64, current_best: u64) -> Op
 /// Functional largest palindrome search using tail recursion
 /// Pure functional implementation with explicit tail calls
 #[inline(always)]
-pub fn largest_functional(min: u64, max: u64) -> Option<(u64, ArrayVec<u64, 24>)> {
+pub fn largest_functional(min: u32, max: u32) -> Option<(u32, ArrayVec<u32, 4>)> {
     // Start with x = max, keep max as fixed upper bound
     search_largest(max, min, max, 0)
 }
 
 #[inline(always)]
-fn search_largest(x: u64, min: u64, max: u64, best: u64) -> Option<(u64, ArrayVec<u64, 24>)> {
+fn search_largest(x: u32, min: u32, max: u32, best: u32) -> Option<(u32, ArrayVec<u32, 4>)> {
     if x < min || x * max <= best {
         if best == 0 {
             None
         } else {
             Some((best, collect_factor_pairs(best, min, max)))
         }
-    } else if x == 0 {
-        None
     } else {
         match search_row_for_largest(x, best, max) {
             None => search_largest(x - 1, min, max, best),
@@ -202,21 +184,17 @@ fn search_largest(x: u64, min: u64, max: u64, best: u64) -> Option<(u64, ArrayVe
 }
 
 #[inline(always)]
-fn search_row_for_largest(x: u64, best: u64, max: u64) -> Option<u64> {
-    if x == 0 {
+fn search_row_for_largest(x: u32, best: u32, max: u32) -> Option<u32> {
+    let y_lower = ((best / x) + 1).max(x);
+    if y_lower > max {
         None
     } else {
-        let y_lower = ((best / x) + 1).max(x);
-        if y_lower > max {
-            None
-        } else {
-            search_column_largest(x, max, y_lower, 0)
-        }
+        search_column_largest(x, max, y_lower, 0)
     }
 }
 
 #[inline(always)]
-fn search_column_largest(x: u64, y: u64, y_lower: u64, current_best: u64) -> Option<u64> {
+fn search_column_largest(x: u32, y: u32, y_lower: u32, current_best: u32) -> Option<u32> {
     if y < y_lower {
         if current_best == 0 {
             None
@@ -234,7 +212,7 @@ fn search_column_largest(x: u64, y: u64, y_lower: u64, current_best: u64) -> Opt
 }
 
 #[inline(always)]
-pub fn do_iters_largest_functional(min: u64, max: u64, iters: u64) -> (Option<u64>, u64) {
+pub fn do_iters_largest_functional(min: u32, max: u32, iters: u64) -> (Option<u32>, u64) {
     // Create an iterator that cycles through the range
     let acc = (0..iters)
         .scan(max, |current_max, _| {
@@ -248,10 +226,10 @@ pub fn do_iters_largest_functional(min: u64, max: u64, iters: u64) -> (Option<u6
         })
         .map(|current_max| {
             largest_functional(min, current_max)
-                .map(|(prod, pairs)| (prod, pairs.into_iter().sum::<u64>()))
+                .map(|(prod, pairs)| (prod, pairs.into_iter().map(|v| v as u64).sum::<u64>()))
         })
         .fold((0u64, 0u64), |(acc, cnt), result| match result {
-            Some((prod, pairs_sum)) => (acc + prod + pairs_sum + cnt, cnt + 1),
+            Some((prod, pairs_sum)) => (acc + (prod as u64) + pairs_sum + cnt, cnt + 1),
             None => (acc, cnt + 1),
         });
 
@@ -260,7 +238,7 @@ pub fn do_iters_largest_functional(min: u64, max: u64, iters: u64) -> (Option<u6
 }
 
 #[inline(always)]
-pub fn do_iters_smallest_functional(min: u64, max: u64, iters: u64) -> (Option<u64>, u64) {
+pub fn do_iters_smallest_functional(min: u32, max: u32, iters: u64) -> (Option<u32>, u64) {
     // Create an iterator that cycles through the range
     let acc = (0..iters)
         .scan(min, |current_min, _| {
@@ -274,10 +252,10 @@ pub fn do_iters_smallest_functional(min: u64, max: u64, iters: u64) -> (Option<u
         })
         .map(|current_min| {
             smallest_functional(current_min, max)
-                .map(|(prod, pairs)| (prod, pairs.into_iter().sum::<u64>()))
+                .map(|(prod, pairs)| (prod, pairs.into_iter().map(|v| v as u64).sum::<u64>()))
         })
         .fold((0u64, 0u64), |(acc, cnt), result| match result {
-            Some((prod, pairs_sum)) => (acc + prod + pairs_sum + cnt, cnt + 1),
+            Some((prod, pairs_sum)) => (acc + (prod as u64) + pairs_sum + cnt, cnt + 1),
             None => (acc, cnt + 1),
         });
 
@@ -285,20 +263,21 @@ pub fn do_iters_smallest_functional(min: u64, max: u64, iters: u64) -> (Option<u
     (base_prod, acc.0)
 }
 
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn norm(v: impl IntoIterator<Item = (u64, u64)>) -> Vec<(u64, u64)> {
-        let mut out: Vec<(u64, u64)> = v.into_iter().collect();
+    fn norm(v: impl IntoIterator<Item = (u32, u32)>) -> Vec<(u32, u32)> {
+        let mut out: Vec<(u32, u32)> = v.into_iter().collect();
         out.sort_unstable();
         out
     }
 
     fn assert_some_eq(
-        got: Option<(u64, ArrayVec<u64, 24>)>,
-        expect_p: u64,
-        expect_factors: &[(u64, u64)],
+        got: Option<(u32, ArrayVec<u32, 4>)>,
+        expect_p: u32,
+        expect_factors: &[(u32, u32)],
     ) {
         let (p, f) = got.expect("expected Some(..), got None");
         assert_eq!(p, expect_p, "product mismatch");

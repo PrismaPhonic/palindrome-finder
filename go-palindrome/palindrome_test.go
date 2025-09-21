@@ -7,8 +7,8 @@ import (
 )
 
 // Helper function to normalize factor pairs for comparison (matches Rust norm function)
-func norm(pairs [][2]uint64) [][2]uint64 {
-	result := make([][2]uint64, len(pairs))
+func norm(pairs [][2]uint32) [][2]uint32 {
+	result := make([][2]uint32, len(pairs))
 	copy(result, pairs)
 	sort.Slice(result, func(i, j int) bool {
 		if result[i][0] == result[j][0] {
@@ -21,9 +21,9 @@ func norm(pairs [][2]uint64) [][2]uint64 {
 
 // Helper function to convert flat array to pairs and compare (matches Rust assert_some_eq)
 func assertSomeEq(t *testing.T, got func() *struct {
-	Product uint64
-	Pairs   []uint64
-}, expectP uint64, expectFactors [][2]uint64) {
+	Product uint32
+	Pairs   []uint32
+}, expectP uint32, expectFactors [][2]uint32) {
 	result := got()
 	if result == nil {
 		t.Errorf("expected Some(..), got None")
@@ -34,11 +34,11 @@ func assertSomeEq(t *testing.T, got func() *struct {
 	}
 
 	// Convert flat array to pairs for comparison
-	var resultPairs [][2]uint64
+	var resultPairs [][2]uint32
 	// Find the actual length by looking for the first zero pair
 	for i := 0; i < len(result.Pairs); i += 2 {
 		if i+1 < len(result.Pairs) && result.Pairs[i] != 0 && result.Pairs[i+1] != 0 {
-			resultPairs = append(resultPairs, [2]uint64{result.Pairs[i], result.Pairs[i+1]})
+			resultPairs = append(resultPairs, [2]uint32{result.Pairs[i], result.Pairs[i+1]})
 		} else {
 			break
 		}
@@ -141,103 +141,103 @@ func TestOddLengthPal(t *testing.T) {
 }
 
 func TestFindTheSmallestPalindromeFromSingleDigitFactors(t *testing.T) {
-	minFactor, maxFactor := uint64(1), uint64(9)
-	palindrome := uint64(1)
-	factors := [][2]uint64{{1, 1}}
+	minFactor, maxFactor := uint32(1), uint32(9)
+	palindrome := uint32(1)
+	factors := [][2]uint32{{1, 1}}
 	assertSomeEq(t, func() *struct {
-		Product uint64
-		Pairs   []uint64
+		Product uint32
+		Pairs   []uint32
 	} {
 		return Smallest(minFactor, maxFactor)
 	}, palindrome, factors)
 }
 
 func TestFindTheLargestPalindromeFromSingleDigitFactors(t *testing.T) {
-	minFactor, maxFactor := uint64(1), uint64(9)
-	palindrome := uint64(9)
-	factors := [][2]uint64{{1, 9}, {3, 3}}
+	minFactor, maxFactor := uint32(1), uint32(9)
+	palindrome := uint32(9)
+	factors := [][2]uint32{{1, 9}, {3, 3}}
 	assertSomeEq(t, func() *struct {
-		Product uint64
-		Pairs   []uint64
+		Product uint32
+		Pairs   []uint32
 	} {
 		return Largest(minFactor, maxFactor)
 	}, palindrome, factors)
 }
 
 func TestFindTheSmallestPalindromeFromDoubleDigitFactors(t *testing.T) {
-	minFactor, maxFactor := uint64(10), uint64(99)
-	palindrome := uint64(121)
-	factors := [][2]uint64{{11, 11}}
+	minFactor, maxFactor := uint32(10), uint32(99)
+	palindrome := uint32(121)
+	factors := [][2]uint32{{11, 11}}
 	assertSomeEq(t, func() *struct {
-		Product uint64
-		Pairs   []uint64
+		Product uint32
+		Pairs   []uint32
 	} {
 		return Smallest(minFactor, maxFactor)
 	}, palindrome, factors)
 }
 
 func TestFindTheLargestPalindromeFromDoubleDigitFactors(t *testing.T) {
-	minFactor, maxFactor := uint64(10), uint64(99)
-	palindrome := uint64(9009)
-	factors := [][2]uint64{{91, 99}}
+	minFactor, maxFactor := uint32(10), uint32(99)
+	palindrome := uint32(9009)
+	factors := [][2]uint32{{91, 99}}
 	assertSomeEq(t, func() *struct {
-		Product uint64
-		Pairs   []uint64
+		Product uint32
+		Pairs   []uint32
 	} {
 		return Largest(minFactor, maxFactor)
 	}, palindrome, factors)
 }
 
 func TestFindTheSmallestPalindromeFromTripleDigitFactors(t *testing.T) {
-	minFactor, maxFactor := uint64(100), uint64(999)
-	palindrome := uint64(10201)
-	factors := [][2]uint64{{101, 101}}
+	minFactor, maxFactor := uint32(100), uint32(999)
+	palindrome := uint32(10201)
+	factors := [][2]uint32{{101, 101}}
 	assertSomeEq(t, func() *struct {
-		Product uint64
-		Pairs   []uint64
+		Product uint32
+		Pairs   []uint32
 	} {
 		return Smallest(minFactor, maxFactor)
 	}, palindrome, factors)
 }
 
 func TestFindTheLargestPalindromeFromTripleDigitFactors(t *testing.T) {
-	minFactor, maxFactor := uint64(100), uint64(999)
-	palindrome := uint64(906609)
-	factors := [][2]uint64{{913, 993}}
+	minFactor, maxFactor := uint32(100), uint32(999)
+	palindrome := uint32(906609)
+	factors := [][2]uint32{{913, 993}}
 	assertSomeEq(t, func() *struct {
-		Product uint64
-		Pairs   []uint64
+		Product uint32
+		Pairs   []uint32
 	} {
 		return Largest(minFactor, maxFactor)
 	}, palindrome, factors)
 }
 
 func TestFindTheSmallestPalindromeFromFourDigitFactors(t *testing.T) {
-	minFactor, maxFactor := uint64(1000), uint64(9999)
-	palindrome := uint64(1002001)
-	factors := [][2]uint64{{1001, 1001}}
+	minFactor, maxFactor := uint32(1000), uint32(9999)
+	palindrome := uint32(1002001)
+	factors := [][2]uint32{{1001, 1001}}
 	assertSomeEq(t, func() *struct {
-		Product uint64
-		Pairs   []uint64
+		Product uint32
+		Pairs   []uint32
 	} {
 		return Smallest(minFactor, maxFactor)
 	}, palindrome, factors)
 }
 
 func TestFindTheLargestPalindromeFromFourDigitFactors(t *testing.T) {
-	minFactor, maxFactor := uint64(1000), uint64(9999)
-	palindrome := uint64(99000099)
-	factors := [][2]uint64{{9901, 9999}}
+	minFactor, maxFactor := uint32(1000), uint32(9999)
+	palindrome := uint32(99000099)
+	factors := [][2]uint32{{9901, 9999}}
 	assertSomeEq(t, func() *struct {
-		Product uint64
-		Pairs   []uint64
+		Product uint32
+		Pairs   []uint32
 	} {
 		return Largest(minFactor, maxFactor)
 	}, palindrome, factors)
 }
 
 func TestEmptyResultForSmallestIfNoPalindromeInTheRange(t *testing.T) {
-	minFactor, maxFactor := uint64(1002), uint64(1003)
+	minFactor, maxFactor := uint32(1002), uint32(1003)
 	result := Smallest(minFactor, maxFactor)
 	if result != nil {
 		t.Errorf("expected smallest(1002, 1003) to return None")
@@ -245,7 +245,7 @@ func TestEmptyResultForSmallestIfNoPalindromeInTheRange(t *testing.T) {
 }
 
 func TestEmptyResultForLargestIfNoPalindromeInTheRange(t *testing.T) {
-	minFactor, maxFactor := uint64(15), uint64(15)
+	minFactor, maxFactor := uint32(15), uint32(15)
 	result := Largest(minFactor, maxFactor)
 	if result != nil {
 		t.Errorf("expected largest(15, 15) to return None")
@@ -253,7 +253,7 @@ func TestEmptyResultForLargestIfNoPalindromeInTheRange(t *testing.T) {
 }
 
 func TestErrorResultForSmallestIfMinIsMoreThanMax(t *testing.T) {
-	minFactor, maxFactor := uint64(10000), uint64(1)
+	minFactor, maxFactor := uint32(10000), uint32(1)
 	result := Smallest(minFactor, maxFactor)
 	if result != nil {
 		t.Errorf("expected smallest(10000, 1) to return None")
@@ -261,7 +261,7 @@ func TestErrorResultForSmallestIfMinIsMoreThanMax(t *testing.T) {
 }
 
 func TestErrorResultForLargestIfMinIsMoreThanMax(t *testing.T) {
-	minFactor, maxFactor := uint64(2), uint64(1)
+	minFactor, maxFactor := uint32(2), uint32(1)
 	result := Largest(minFactor, maxFactor)
 	if result != nil {
 		t.Errorf("expected largest(2, 1) to return None")
@@ -269,12 +269,12 @@ func TestErrorResultForLargestIfMinIsMoreThanMax(t *testing.T) {
 }
 
 func TestSmallestProductDoesNotUseTheSmallestFactor(t *testing.T) {
-	minFactor, maxFactor := uint64(3215), uint64(4000)
-	palindrome := uint64(10988901)
-	factors := [][2]uint64{{3297, 3333}}
+	minFactor, maxFactor := uint32(3215), uint32(4000)
+	palindrome := uint32(10988901)
+	factors := [][2]uint32{{3297, 3333}}
 	assertSomeEq(t, func() *struct {
-		Product uint64
-		Pairs   []uint64
+		Product uint32
+		Pairs   []uint32
 	} {
 		return Smallest(minFactor, maxFactor)
 	}, palindrome, factors)

@@ -1,5 +1,5 @@
 import Palindrome (smallest, largest, isPalindrome)
-import Data.Word (Word64)
+import Data.Word (Word32)
 
 main :: IO ()
 main = do

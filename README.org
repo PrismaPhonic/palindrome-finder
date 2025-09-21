@@ -17,6 +17,11 @@ All implementations require min > 0 (strictly positive inputs only). This constr
 eliminates edge cases with zero factors and allows for more predictable, optimized
 code paths without special-case branching.
 
+Additionally, for benchmarking and implementation comparability, we constrain
+factor ranges to at most three-digit inputs (1..=999). This avoids extremely
+long runtimes, recursion depth issues, and oversized temporary buffers that
+can degrade cache behavior on some implementations.
+
 Each function returns:
 1. The palindrome value itself
 2. The list of factor pairs that generate it
@@ -237,22 +242,22 @@ Latest average times per iteration (sorted from largest to smallest, then fastes
 
 | Implementation               |  Range | Task     | Time      |
 |------------------------------+--------+----------+-----------|
-| Rust Functional              | 2..999 | largest  | 1.7296 µs |
-| Rust Functional (PGO + Bolt) | 2..999 | largest  | 1.7381 µs |
-| Haskell                      | 2..999 | largest  | 1.8788 µs |
-| Rust (PGO + Bolt)            | 2..999 | largest  | 1.9668 µs |
-| Rust                         | 2..999 | largest  | 1.9746 µs |
-| Common Lisp                  | 2..999 | largest  | 2.2805 µs |
-| Golang                       | 2..999 | largest  | 2.4787 µs |
-| Coalton                      | 2..999 | largest  | 2.5278 µs |
-| Rust Functional (PGO + Bolt) | 2..999 | smallest | 2.0081 µs |
-| Rust Functional              | 2..999 | smallest | 2.2334 µs |
-| Rust (PGO + Bolt)            | 2..999 | smallest | 2.3492 µs |
-| Haskell                      | 2..999 | smallest | 2.4570 µs |
-| Rust                         | 2..999 | smallest | 2.6980 µs |
-| Common Lisp                  | 2..999 | smallest | 3.3533 µs |
-| Golang                       | 2..999 | smallest | 3.6945 µs |
-| Coalton                      | 2..999 | smallest | 3.7540 µs |
+| Haskell                      | 2..999 | largest  | 1.5724 µs |
+| Rust Functional              | 2..999 | largest  | 1.7381 µs |
+| Rust Functional (PGO + Bolt) | 2..999 | largest  | 1.8917 µs |
+| Rust (PGO + Bolt)            | 2..999 | largest  | 1.9159 µs |
+| Rust                         | 2..999 | largest  | 1.9657 µs |
+| Golang                       | 2..999 | largest  | 2.2171 µs |
+| Common Lisp                  | 2..999 | largest  | 2.2913 µs |
+| Coalton                      | 2..999 | largest  | 2.5740 µs |
+| Rust Functional (PGO + Bolt) | 2..999 | smallest | 1.9688 µs |
+| Haskell                      | 2..999 | smallest | 2.0212 µs |
+| Rust (PGO + Bolt)            | 2..999 | smallest | 2.2951 µs |
+| Rust Functional              | 2..999 | smallest | 2.4766 µs |
+| Rust                         | 2..999 | smallest | 2.7379 µs |
+| Golang                       | 2..999 | smallest | 3.0846 µs |
+| Common Lisp                  | 2..999 | smallest | 3.1917 µs |
+| Coalton                      | 2..999 | smallest | 3.6518 µs |
 |                              |        |          |           |
 * Rust functional implementation
 

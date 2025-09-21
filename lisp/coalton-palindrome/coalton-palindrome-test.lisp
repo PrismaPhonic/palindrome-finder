@@ -16,7 +16,7 @@
 ;; Define and enter a new FiveAM test-suite
 (def-suite* coalton-palindrome-suite)
 
-;; Helper function to call Coalton functions
+;; Helper functions to call Coalton functions via wrappers
 (defun call-coalton-smallest (min-factor max-factor)
   "Return (values product marker) where marker is T if factors exist, NIL otherwise.
 If min > max, return NIL (single value) to match error-case expectations."

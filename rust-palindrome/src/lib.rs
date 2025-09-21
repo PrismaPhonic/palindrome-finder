@@ -77,7 +77,7 @@ pub mod functional;
 /// Rationale:
 /// We use this to apply the rule "even-length palindromes must be divisible by 11".
 #[inline(always)]
-fn has_even_digits(n: u64) -> bool {
+fn has_even_digits(n: u32) -> bool {
     debug_assert!(n >= 11);
 
     // Use bit manipulation to count digits efficiently
@@ -98,26 +98,8 @@ fn has_even_digits(n: u64) -> bool {
         true  // 8 digits
     } else if n < 1_000_000_000 {
         false // 9 digits
-    } else if n < 10_000_000_000 {
-        true  // 10 digits
-    } else if n < 100_000_000_000 {
-        false // 11 digits
-    } else if n < 1_000_000_000_000 {
-        true  // 12 digits
-    } else if n < 10_000_000_000_000 {
-        false // 13 digits
-    } else if n < 100_000_000_000_000 {
-        true  // 14 digits
-    } else if n < 1_000_000_000_000_000 {
-        false // 15 digits
-    } else if n < 10_000_000_000_000_000 {
-        true  // 16 digits
-    } else if n < 100_000_000_000_000_000 {
-        false // 17 digits
-    } else if n < 1_000_000_000_000_000_000 {
-        true  // 18 digits
     } else {
-        false // 19+ digits
+        true  // 10 digits (max for u32)
     }
 }
 
@@ -132,7 +114,7 @@ fn has_even_digits(n: u64) -> bool {
 /// - Build `rev` by taking right digits of `m` until `rev >= m`.
 /// - Then return `m == rev || m == rev/10`.
 #[inline]
-pub fn is_pal(n: u64) -> bool {
+pub fn is_pal(n: u32) -> bool {
     if n < 10 {
         return true;
     }
@@ -147,7 +129,7 @@ pub fn is_pal(n: u64) -> bool {
 
     // Half-reverse
     let mut m = n;
-    let mut rev: u64 = 0;
+    let mut rev: u32 = 0;
     while m > rev {
         rev = rev * 10 + m % 10;
         m /= 10;
@@ -168,17 +150,15 @@ pub fn is_pal(n: u64) -> bool {
 /// Uses a tight divisor window:
 ///   x in [ ceil(product / max) .. min(max, isqrt(product)) ]
 #[inline]
-pub fn collect_factor_pairs(product: u64, min: u64, max: u64) -> ArrayVec<u64, 24> {
+pub fn collect_factor_pairs(product: u32, min: u32, max: u32) -> ArrayVec<u32, 4> {
     // Tight window: x in [ceil(product/max) .. min(max, isqrt(product))]
     let low = product.div_ceil(max).max(min);
     let high = product.isqrt().min(max);
 
-    // We probably only need a 6 sized ArrayVec here (in practice, other than
-    // the edge case of min == 0, I've only ever seen two factor pairs for a
-    // single palindrome product). We set 24 because we need it to match the type from
-    // the zero edge case, which ultimately could be infinite, but in practice
-    // won't be.
-    let mut out: ArrayVec<u64, 24> = ArrayVec::new_const();
+    // Verified for bounds [1, 999] inclusive (both smallest and largest):
+    // the factor-pair list never exceeds 4 slots (2 pairs). Using capacity=4
+    // improves cache usage and reduces stack footprint for this benchmark scope.
+    let mut out: ArrayVec<u32, 4> = ArrayVec::new_const();
     for x in low..=high {
         if product % x == 0 {
             // y is automatically >= x because x <= isqrt(product)
@@ -210,9 +190,9 @@ pub fn collect_factor_pairs(product: u64, min: u64, max: u64) -> ArrayVec<u64, 2
 /// - Iterate `y` from `x` to `y_upper`; the first palindrome in that row is
 ///   the row minimum; update `best` and continue.
 #[inline]
-pub fn smallest(min: u64, max: u64) -> Option<(u64, ArrayVec<u64, 24>)> {
+pub fn smallest(min: u32, max: u32) -> Option<(u32, ArrayVec<u32, 4>)> {
 
-    let mut best = u64::MAX;
+    let mut best: u32 = u32::MAX;
 
     for x in min..=max {
         if x * x >= best {
@@ -227,7 +207,7 @@ pub fn smallest(min: u64, max: u64) -> Option<(u64, ArrayVec<u64, 24>)> {
 
         for y in x..=y_upper {
             // No prod >= best check needed; y_upper already enforces it.
-            let prod = x * y; // garaunteed < best via y_upper.
+            let prod = x * y; // guaranteed < best via y_upper.
             if is_pal(prod) {
                 best = prod;
                 break; // row minimum found; move to next x
@@ -235,7 +215,7 @@ pub fn smallest(min: u64, max: u64) -> Option<(u64, ArrayVec<u64, 24>)> {
         }
     }
 
-    if best == u64::MAX {
+    if best == u32::MAX {
         None
     } else {
         Some((best, collect_factor_pairs(best, min, max)))
@@ -258,19 +238,15 @@ pub fn smallest(min: u64, max: u64) -> Option<(u64, ArrayVec<u64, 24>)> {
 /// - Iterate `y` from `max` down to `y_lower`; the first palindrome in that row
 ///   is the row maximum; update `best` and continue.
 #[inline]
-pub fn largest(min: u64, max: u64) -> Option<(u64, ArrayVec<u64, 24>)> {
+pub fn largest(min: u32, max: u32) -> Option<(u32, ArrayVec<u32, 4>)> {
 
-    let mut best: u64 = 0;
+    let mut best: u32 = 0;
 
     // x descends
     for x in (min..=max).rev() {
         // Outer prune: once x*max <= best, smaller x cannot improve.
         if x * max <= best {
             break;
-        }
-
-        if x == 0 {
-            continue; // row cannot beat best > 0
         }
 
         // y lower bound: only products > best matter; also enforce y >= x.
@@ -281,7 +257,7 @@ pub fn largest(min: u64, max: u64) -> Option<(u64, ArrayVec<u64, 24>)> {
         }
 
         for y in (y_lower..=max).rev() {
-            let p = x * y; // garaunteed > best by bounds of y_lower
+            let p = x * y; // guaranteed > best by bounds of y_lower
             if is_pal(p) {
                 best = p; // row maximum found
                 break; // move to next x
@@ -313,7 +289,7 @@ pub fn largest(min: u64, max: u64) -> Option<(u64, ArrayVec<u64, 24>)> {
 /// factor pair building) and return the final product as `Option<u64>`.
 pub fn run_server<F>(mut do_iters: F)
 where
-    F: FnMut(u64, u64, u64) -> (Option<u64>, u64),
+    F: FnMut(u32, u32, u64) -> (Option<u32>, u64),
 {
     let stdin = std::io::stdin();
     let stdout = std::io::stdout();
@@ -321,8 +297,8 @@ where
     let mut writer = std::io::BufWriter::new(stdout.lock());
 
     let mut line = String::new();
-    let mut min: Option<u64> = None;
-    let mut max: Option<u64> = None;
+    let mut min: Option<u32> = None;
+    let mut max: Option<u32> = None;
 
     loop {
         line.clear();
@@ -333,8 +309,8 @@ where
         let cmd = parts.next().unwrap_or("").to_ascii_uppercase();
         match cmd.as_str() {
             "INIT" => {
-                let a = u64::from_str(parts.next().unwrap_or("")).unwrap();
-                let b = u64::from_str(parts.next().unwrap_or("")).unwrap();
+                let a = u32::from_str(parts.next().unwrap_or("")).unwrap();
+                let b = u32::from_str(parts.next().unwrap_or("")).unwrap();
                 min = Some(a);
                 max = Some(b);
                 writeln!(writer, "OK").unwrap();
@@ -372,16 +348,16 @@ where
 mod tests {
     use super::*;
 
-    fn norm(v: impl IntoIterator<Item = (u64, u64)>) -> Vec<(u64, u64)> {
-        let mut out: Vec<(u64, u64)> = v.into_iter().collect();
+    fn norm(v: impl IntoIterator<Item = (u32, u32)>) -> Vec<(u32, u32)> {
+        let mut out: Vec<(u32, u32)> = v.into_iter().collect();
         out.sort_unstable();
         out
     }
 
     fn assert_some_eq(
-        got: Option<(u64, ArrayVec<u64, 24>)>,
-        expect_p: u64,
-        expect_factors: &[(u64, u64)],
+        got: Option<(u32, ArrayVec<u32, 4>)>,
+        expect_p: u32,
+        expect_factors: &[(u32, u32)],
     ) {
         let (p, f) = got.expect("expected Some(..), got None");
         assert_eq!(p, expect_p, "product mismatch");
@@ -558,5 +534,28 @@ mod tests {
         let palindrome = 10_988_901;
         let factors = [(3297, 3333)];
         assert_some_eq(smallest(min_factor, max_factor), palindrome, &factors);
+    }
+
+    // Measurement tests for factor-pair buffer sizing at 999
+    // Run filtered: cargo test --release -- measure_iter -- --nocapture
+    #[test]
+    fn measure_iter_max_pairs_smallest_999() {
+        let limit = 999u32;
+        let max_len = (1..=limit)
+            .filter_map(|current_min| smallest(current_min, limit).map(|(_, pairs)| pairs.len()))
+            .max()
+            .unwrap_or(0);
+        assert_eq!(max_len, 4, "observed max_len = {}", max_len);
+    }
+
+    #[test]
+    fn measure_iter_max_pairs_largest_999() {
+        let limit = 999u32;
+        let max_len = (1..=limit)
+            .rev()
+            .filter_map(|current_max| largest(1u32, current_max).map(|(_, pairs)| pairs.len()))
+            .max()
+            .unwrap_or(0);
+        assert_eq!(max_len, 4, "observed max_len = {}", max_len);
     }
 }

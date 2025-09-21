@@ -8,16 +8,16 @@ import (
 	"palindrome"
 )
 
-func doIters(min, max uint64, iters uint64) (uint64, uint64) {
-	var acc uint64 = 0
-	var counter uint64 = 0
+func doIters(min, max uint32, iters uint32) (uint32, uint32) {
+	var acc uint32 = 0
+	var counter uint32 = 0
 	currentMin := min
 
-	for n := uint64(0); n < iters; n++ {
+	for n := uint32(0); n < iters; n++ {
 		if res := palindrome.Smallest(currentMin, max); res != nil {
 			prod := res.Product
 			fpairs := res.Pairs
-			var sPairs uint64
+			var sPairs uint32
 			for k := 0; k+1 < len(fpairs); k += 2 {
 				sPairs += fpairs[k] + fpairs[k+1]
 			}
@@ -33,7 +33,7 @@ func doIters(min, max uint64, iters uint64) (uint64, uint64) {
 
 	// Return the result for the original range
 	result := palindrome.Smallest(min, max)
-	var prod uint64
+	var prod uint32
 	if result != nil {
 		prod = result.Product
 	}
@@ -50,13 +50,16 @@ func main() {
 		fmt.Fprintf(os.Stderr, "usage: %s <min> <max> <iters>  |  %s --server\n", args[0], args[0])
 		os.Exit(2)
 	}
-	min, err1 := strconv.ParseUint(args[1], 10, 64)
-	max, err2 := strconv.ParseUint(args[2], 10, 64)
-	iters, err3 := strconv.ParseUint(args[3], 10, 64)
+	min64, err1 := strconv.ParseUint(args[1], 10, 32)
+	max64, err2 := strconv.ParseUint(args[2], 10, 32)
+	iters64, err3 := strconv.ParseUint(args[3], 10, 32)
 	if err1 != nil || err2 != nil || err3 != nil {
 		fmt.Fprintf(os.Stderr, "error parsing arguments\n")
 		os.Exit(2)
 	}
+	min := uint32(min64)
+	max := uint32(max64)
+	iters := uint32(iters64)
 	if iters == 0 {
 		iters = 1
 	}

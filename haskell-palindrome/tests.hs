@@ -2,22 +2,22 @@
 
 import qualified Palindrome as P
 import Palindrome (smallest, largest, isPalindrome, collectPositiveFactorPairs, Result(..))
-import Data.Word (Word64)
+import Data.Word (Word32)
 import Data.Array.Unboxed (elems)
 import Data.List (sort)
 
 -- Helper function to normalize factor pairs for comparison
-norm :: [(Word64, Word64)] -> [(Word64, Word64)]
+norm :: [(Word32, Word32)] -> [(Word32, Word32)]
 norm = sort
 
 -- Helper function to convert flat array to pairs
-arrayToPairs :: [Word64] -> [(Word64, Word64)]
+arrayToPairs :: [Word32] -> [(Word32, Word32)]
 arrayToPairs [] = []
 arrayToPairs [_] = []  -- odd length, ignore last element
 arrayToPairs (x:y:rest) = (x, y) : arrayToPairs rest
 
 -- Helper function to assert Some result matches expected
-assertSomeEq :: Maybe (Word64, [Word64]) -> Word64 -> [(Word64, Word64)] -> IO ()
+assertSomeEq :: Maybe (Word32, [Word32]) -> Word32 -> [(Word32, Word32)] -> IO ()
 assertSomeEq got expectP expectFactors = do
     case got of
         Nothing -> error "expected Some(..), got None"
@@ -49,7 +49,7 @@ testSmallest = do
                                 else do
                                     if factors !! 1 /= 932
                                         then error $ "second factor mismatch: expected 932 got " ++ show (factors !! 1)
-                                        else putStrLn "✓ test_smallest passed"
+                                        else putStrLn "\xe2\x9c\x93 test_smallest passed"
 
 largest910_999 :: IO ()
 largest910_999 = do
@@ -64,7 +64,7 @@ largest910_999 = do
                     let found = checkFactorPair factors 913 993
                     if not found
                         then error "expected factor pair (913, 993) not found"
-                        else putStrLn "✓ largest_910_999 passed"
+                        else putStrLn "\xe2\x9c\x93 largest_910_999 passed"
 
 largest100_999 :: IO ()
 largest100_999 = do
@@ -79,10 +79,10 @@ largest100_999 = do
                     let found = checkFactorPair factors 913 993
                     if not found
                         then error "expected factor pair (913, 993) not found"
-                        else putStrLn "✓ largest_100_999 passed"
+                        else putStrLn "\xe2\x9c\x93 largest_100_999 passed"
 
 -- Helper to check if a factor pair exists in the flat array
-checkFactorPair :: [Word64] -> Word64 -> Word64 -> Bool
+checkFactorPair :: [Word32] -> Word32 -> Word32 -> Bool
 checkFactorPair [] _ _ = False
 checkFactorPair [_] _ _ = False
 checkFactorPair (x:y:rest) a b = (x == a && y == b) || checkFactorPair rest a b
@@ -90,31 +90,31 @@ checkFactorPair (x:y:rest) a b = (x == a && y == b) || checkFactorPair rest a b
 singleDigitPal :: IO ()
 singleDigitPal = do
     if isPalindrome 9
-        then putStrLn "✓ single_digit_pal passed"
+        then putStrLn "\xe2\x9c\x93 single_digit_pal passed"
         else error "expected isPalindrome 9 to be True"
 
 evenSixPal :: IO ()
 evenSixPal = do
     if isPalindrome 906609
-        then putStrLn "✓ even_six_pal passed"
+        then putStrLn "\xe2\x9c\x93 even_six_pal passed"
         else error "expected isPalindrome 906609 to be True"
 
 trailingZeroPal :: IO ()
 trailingZeroPal = do
     if not (isPalindrome 40)
-        then putStrLn "✓ trailing_zero_pal passed"
+        then putStrLn "\xe2\x9c\x93 trailing_zero_pal passed"
         else error "expected isPalindrome 40 to be False"
 
 evenNotDiv11 :: IO ()
 evenNotDiv11 = do
     if not (isPalindrome 123456)
-        then putStrLn "✓ even_not_div_11 passed"
+        then putStrLn "\xe2\x9c\x93 even_not_div_11 passed"
         else error "expected isPalindrome 123456 to be False"
 
 oddLengthPal :: IO ()
 oddLengthPal = do
     if isPalindrome 10988901
-        then putStrLn "✓ odd_length_pal passed"
+        then putStrLn "\xe2\x9c\x93 odd_length_pal passed"
         else error "expected isPalindrome 10988901 to be True"
 
 findSmallestPalindromeFromSingleDigitFactors :: IO ()
@@ -129,7 +129,7 @@ findSmallestPalindromeFromSingleDigitFactors = do
                     let factors = arrayToPairs (elems (P.pairs r))
                     if norm factors /= norm [(1, 1)]
                         then error $ "factors mismatch: expected [(1,1)] got " ++ show (norm factors)
-                        else putStrLn "✓ find_the_smallest_palindrome_from_single_digit_factors passed"
+                        else putStrLn "\xe2\x9c\x93 find_the_smallest_palindrome_from_single_digit_factors passed"
 
 findLargestPalindromeFromSingleDigitFactors :: IO ()
 findLargestPalindromeFromSingleDigitFactors = do
@@ -143,7 +143,7 @@ findLargestPalindromeFromSingleDigitFactors = do
                     let factors = arrayToPairs (elems (P.pairs r))
                     if norm factors /= norm [(1, 9), (3, 3)]
                         then error $ "factors mismatch: expected [(1,9),(3,3)] got " ++ show (norm factors)
-                        else putStrLn "✓ find_the_largest_palindrome_from_single_digit_factors passed"
+                        else putStrLn "\xe2\x9c\x93 find_the_largest_palindrome_from_single_digit_factors passed"
 
 findSmallestPalindromeFromDoubleDigitFactors :: IO ()
 findSmallestPalindromeFromDoubleDigitFactors = do
@@ -157,7 +157,7 @@ findSmallestPalindromeFromDoubleDigitFactors = do
                     let factors = arrayToPairs (elems (P.pairs r))
                     if norm factors /= norm [(11, 11)]
                         then error $ "factors mismatch: expected [(11,11)] got " ++ show (norm factors)
-                        else putStrLn "✓ find_the_smallest_palindrome_from_double_digit_factors passed"
+                        else putStrLn "\xe2\x9c\x93 find_the_smallest_palindrome_from_double_digit_factors passed"
 
 findLargestPalindromeFromDoubleDigitFactors :: IO ()
 findLargestPalindromeFromDoubleDigitFactors = do
@@ -171,7 +171,7 @@ findLargestPalindromeFromDoubleDigitFactors = do
                     let factors = arrayToPairs (elems (P.pairs r))
                     if norm factors /= norm [(91, 99)]
                         then error $ "factors mismatch: expected [(91,99)] got " ++ show (norm factors)
-                        else putStrLn "✓ find_the_largest_palindrome_from_double_digit_factors passed"
+                        else putStrLn "\xe2\x9c\x93 find_the_largest_palindrome_from_double_digit_factors passed"
 
 findSmallestPalindromeFromTripleDigitFactors :: IO ()
 findSmallestPalindromeFromTripleDigitFactors = do
@@ -185,7 +185,7 @@ findSmallestPalindromeFromTripleDigitFactors = do
                     let factors = arrayToPairs (elems (P.pairs r))
                     if norm factors /= norm [(101, 101)]
                         then error $ "factors mismatch: expected [(101,101)] got " ++ show (norm factors)
-                        else putStrLn "✓ find_the_smallest_palindrome_from_triple_digit_factors passed"
+                        else putStrLn "\xe2\x9c\x93 find_the_smallest_palindrome_from_triple_digit_factors passed"
 
 findLargestPalindromeFromTripleDigitFactors :: IO ()
 findLargestPalindromeFromTripleDigitFactors = do
@@ -199,7 +199,7 @@ findLargestPalindromeFromTripleDigitFactors = do
                     let factors = arrayToPairs (elems (P.pairs r))
                     if norm factors /= norm [(913, 993)]
                         then error $ "factors mismatch: expected [(913,993)] got " ++ show (norm factors)
-                        else putStrLn "✓ find_the_largest_palindrome_from_triple_digit_factors passed"
+                        else putStrLn "\xe2\x9c\x93 find_the_largest_palindrome_from_triple_digit_factors passed"
 
 findSmallestPalindromeFromFourDigitFactors :: IO ()
 findSmallestPalindromeFromFourDigitFactors = do
@@ -213,7 +213,7 @@ findSmallestPalindromeFromFourDigitFactors = do
                     let factors = arrayToPairs (elems (P.pairs r))
                     if norm factors /= norm [(1001, 1001)]
                         then error $ "factors mismatch: expected [(1001,1001)] got " ++ show (norm factors)
-                        else putStrLn "✓ find_the_smallest_palindrome_from_four_digit_factors passed"
+                        else putStrLn "\xe2\x9c\x93 find_the_smallest_palindrome_from_four_digit_factors passed"
 
 findLargestPalindromeFromFourDigitFactors :: IO ()
 findLargestPalindromeFromFourDigitFactors = do
@@ -227,34 +227,34 @@ findLargestPalindromeFromFourDigitFactors = do
                     let factors = arrayToPairs (elems (P.pairs r))
                     if norm factors /= norm [(9901, 9999)]
                         then error $ "factors mismatch: expected [(9901,9999)] got " ++ show (norm factors)
-                        else putStrLn "✓ find_the_largest_palindrome_from_four_digit_factors passed"
+                        else putStrLn "\xe2\x9c\x93 find_the_largest_palindrome_from_four_digit_factors passed"
 
 emptyResultForSmallestIfNoPalindromeInTheRange :: IO ()
 emptyResultForSmallestIfNoPalindromeInTheRange = do
     let result = smallest 1002 1003
     case result of
-        Nothing -> putStrLn "✓ empty_result_for_smallest_if_no_palindrome_in_the_range passed"
+        Nothing -> putStrLn "\xe2\x9c\x93 empty_result_for_smallest_if_no_palindrome_in_the_range passed"
         Just _ -> error "expected None, got Some(..)"
 
 emptyResultForLargestIfNoPalindromeInTheRange :: IO ()
 emptyResultForLargestIfNoPalindromeInTheRange = do
     let result = largest 15 15
     case result of
-        Nothing -> putStrLn "✓ empty_result_for_largest_if_no_palindrome_in_the_range passed"
+        Nothing -> putStrLn "\xe2\x9c\x93 empty_result_for_largest_if_no_palindrome_in_the_range passed"
         Just _ -> error "expected None, got Some(..)"
 
 errorResultForSmallestIfMinIsMoreThanMax :: IO ()
 errorResultForSmallestIfMinIsMoreThanMax = do
     let result = smallest 10000 1
     case result of
-        Nothing -> putStrLn "✓ error_result_for_smallest_if_min_is_more_than_max passed"
+        Nothing -> putStrLn "\xe2\x9c\x93 error_result_for_smallest_if_min_is_more_than_max passed"
         Just _ -> error "expected None, got Some(..)"
 
 errorResultForLargestIfMinIsMoreThanMax :: IO ()
 errorResultForLargestIfMinIsMoreThanMax = do
     let result = largest 2 1
     case result of
-        Nothing -> putStrLn "✓ error_result_for_largest_if_min_is_more_than_max passed"
+        Nothing -> putStrLn "\xe2\x9c\x93 error_result_for_largest_if_min_is_more_than_max passed"
         Just _ -> error "expected None, got Some(..)"
 
 smallestProductDoesNotUseTheSmallestFactor :: IO ()
@@ -269,7 +269,7 @@ smallestProductDoesNotUseTheSmallestFactor = do
                     let factors = arrayToPairs (elems (P.pairs r))
                     if norm factors /= norm [(3297, 3333)]
                         then error $ "factors mismatch: expected [(3297,3333)] got " ++ show (norm factors)
-                        else putStrLn "✓ smallest_product_does_not_use_the_smallest_factor passed"
+                        else putStrLn "\xe2\x9c\x93 smallest_product_does_not_use_the_smallest_factor passed"
 
 main :: IO ()
 main = do

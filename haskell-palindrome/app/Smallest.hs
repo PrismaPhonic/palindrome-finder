@@ -5,18 +5,18 @@ module Main where
 import qualified Palindrome as P
 import Palindrome (smallest, runServer, Result(..), sumUArray)
 import System.Environment (getArgs)
-import Data.Word (Word64)
+import Data.Word (Word32)
 import Data.Maybe (maybe)
 import Data.Bits (xor, (.&.))
 import Data.Array.Unboxed (elems)
 import qualified Data.Foldable as F
 
 -- | Server implementation for smallest palindrome
-doIters :: Word64 -> Word64 -> Word64 -> (Word64, Word64)
+doIters :: Word32 -> Word32 -> Word32 -> (Word32, Word32)
 
 doIters minVal maxVal iters = 
   let -- Single loop: iterate currentMin from min..max cycling, for exactly `iters` steps
-      iterateSmallest :: Word64 -> Word64 -> Word64 -> Word64 -> (Word64, Word64)
+      iterateSmallest :: Word32 -> Word32 -> Word32 -> Word32 -> (Word32, Word32)
       iterateSmallest !n !currentMin !acc !cnt
         | n >= iters = (acc, cnt)
         | otherwise =
@@ -44,9 +44,9 @@ main = do
   case args of
     ["--server"] -> runServer doIters
     [minStr, maxStr, itersStr] -> do
-      let min' = read minStr :: Word64
-          max' = read maxStr :: Word64
-          iters' = read itersStr :: Word64
+      let min' = read minStr :: Word32
+          max' = read maxStr :: Word32
+          iters' = read itersStr :: Word32
       let (prod, _) = doIters min' max' iters'
       print prod
     _ -> do

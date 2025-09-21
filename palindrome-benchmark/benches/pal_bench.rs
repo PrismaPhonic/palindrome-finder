@@ -76,8 +76,8 @@ fn bench_servered(c: &mut Criterion, name: &str, bin: &str, min: i32, max: i32) 
 }
 
 pub fn benches(c: &mut Criterion) {
-    let fast_lg = "../target-bin/palprod-fast-largest-inner";
-    let fast_sm = "../target-bin/palprod-fast-smallest-inner";
+    let sbcl_lg = "../target-bin/palprod-fast-largest-inner";
+    let sbcl_sm = "../target-bin/palprod-fast-smallest-inner";
     let rust_lg = "../target-bin/palprod-rust-largest";
     let rust_sm = "../target-bin/palprod-rust-smallest";
     let rust_lg_bolt_opt = "../target-bin/palprod-rust-largest-bolt-optimized";
@@ -93,8 +93,11 @@ pub fn benches(c: &mut Criterion) {
     let coalton_lg = "../target-bin/palprod-coalton-largest";
     let coalton_sm = "../target-bin/palprod-coalton-smallest";
 
-    bench_servered(c, "FAST   largest 2..999", fast_lg, 2, 999);
-    bench_servered(c, "FAST   smallest 2..999", fast_sm, 2, 999);
+    bench_servered(c, "Coalton largest 2..999", coalton_lg, 2, 999);
+    bench_servered(c, "Coalton smallest 2..999", coalton_sm, 2, 999);
+
+    bench_servered(c, "Common Lisp   largest 2..999", sbcl_lg, 2, 999);
+    bench_servered(c, "Common Lisp   smallest 2..999", sbcl_sm, 2, 999);
 
     bench_servered(c, "RUST   largest 2..999", rust_lg, 2, 999);
     bench_servered(c, "RUST   smallest 2..999", rust_sm, 2, 999);
@@ -113,9 +116,6 @@ pub fn benches(c: &mut Criterion) {
 
     bench_servered(c, "Haskell largest 2..999", haskell_lg, 2, 999);
     bench_servered(c, "Haskell smallest 2..999", haskell_sm, 2, 999);
-
-    bench_servered(c, "Coalton largest 2..999", coalton_lg, 2, 999);
-    bench_servered(c, "Coalton smallest 2..999", coalton_sm, 2, 999);
 }
 
 criterion_group! {
