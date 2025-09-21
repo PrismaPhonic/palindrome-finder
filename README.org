@@ -237,27 +237,38 @@ Latest average times per iteration (sorted from largest to smallest, then fastes
 
 | Implementation               |  Range | Task     | Time      |
 |------------------------------+--------+----------+-----------|
-| Haskell                      | 2..999 | largest  | 1.6800 µs |
-| Rust Functional              | 2..999 | largest  | 1.7018 µs |
-| Rust Functional (PGO + Bolt) | 2..999 | largest  | 1.8979 µs |
-| Rust (PGO + Bolt)            | 2..999 | largest  | 1.9737 µs |
-| Rust                         | 2..999 | largest  | 1.9750 µs |
-| Common Lisp                  | 2..999 | largest  | 2.2698 µs |
-| Golang                       | 2..999 | largest  | 2.5004 µs |
-| Coalton                      | 2..999 | largest  | 2.5336 µs |
-| Rust Functional (PGO + Bolt) | 2..999 | smallest | 2.0730 µs |
-| Rust (PGO + Bolt)            | 2..999 | smallest | 2.3808 µs |
-| Rust Functional              | 2..999 | smallest | 2.4103 µs |
-| Haskell                      | 2..999 | smallest | 2.4438 µs |
-| Rust                         | 2..999 | smallest | 2.9070 µs |
-| Common Lisp                  | 2..999 | smallest | 3.4488 µs |
-| Coalton                      | 2..999 | smallest | 3.6270 µs |
-| Golang                       | 2..999 | smallest | 3.7358 µs |
+| Rust Functional              | 2..999 | largest  | 1.7296 µs |
+| Rust Functional (PGO + Bolt) | 2..999 | largest  | 1.7381 µs |
+| Haskell                      | 2..999 | largest  | 1.8788 µs |
+| Rust (PGO + Bolt)            | 2..999 | largest  | 1.9668 µs |
+| Rust                         | 2..999 | largest  | 1.9746 µs |
+| Common Lisp                  | 2..999 | largest  | 2.2805 µs |
+| Golang                       | 2..999 | largest  | 2.4787 µs |
+| Coalton                      | 2..999 | largest  | 2.5278 µs |
+| Rust Functional (PGO + Bolt) | 2..999 | smallest | 2.0081 µs |
+| Rust Functional              | 2..999 | smallest | 2.2334 µs |
+| Rust (PGO + Bolt)            | 2..999 | smallest | 2.3492 µs |
+| Haskell                      | 2..999 | smallest | 2.4570 µs |
+| Rust                         | 2..999 | smallest | 2.6980 µs |
+| Common Lisp                  | 2..999 | smallest | 3.3533 µs |
+| Golang                       | 2..999 | smallest | 3.6945 µs |
+| Coalton                      | 2..999 | smallest | 3.7540 µs |
+|                              |        |          |           |
+* Rust functional implementation
+
+I ported the Haskell-style, three-level recursive search to Rust. The first
+version was slower than the imperative Rust solution. After switching to
+Nightly and selectively adding the experimental `become` keyword to simple
+tail-recursive helpers (palindrome half-reverse, factor-pair loop, and the
+row-internal column scans), performance jumped drastically.
+
+`become` is experimental, so it needed to be added incrementally, and needed to
+avoid complex match-arm sites that triggered LLVM musttail errors or segfaults.
 
 * Notes
 - Haskell performance caveat: the Glasgow Haskell Compiler’s native backend was
   substantially slower for this workload. Enabling the LLVM backend (=-fllvm= via
-  Cabal) yielded about a 4× speedup in our measurements and is required for the
+  Cabal) yielded about a 4x speedup in our measurements and is required for the
   results listed above. Ensure your environment is correctly wiring LLVM tools
   (llc/opt and a working assembler driver) so the LLVM pipeline is actually used.
 - All languages use a numeric half-reversal palindrome check (no strings).
@@ -267,7 +278,6 @@ Latest average times per iteration (sorted from largest to smallest, then fastes
 Verification utilities:
 - =test_correctness.sh= cross-checks all server binaries (range 1..999) and
   asserts identical product/accumulator outputs across languages.
-
 
 * Attribution
 Problem statement: Exercism, Common Lisp track, Palindrome Products
