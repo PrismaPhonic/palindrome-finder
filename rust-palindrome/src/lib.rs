@@ -1,3 +1,5 @@
+#![feature(explicit_tail_calls)]
+
 //! Palindromic Products
 //! =========================================
 //!
@@ -60,6 +62,8 @@ use std::io::{BufRead, BufReader, Write};
 use std::str::FromStr;
 
 use arrayvec::ArrayVec;
+
+pub mod functional;
 
 //
 // Palindrome helpers

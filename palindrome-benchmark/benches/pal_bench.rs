@@ -82,6 +82,10 @@ pub fn benches(c: &mut Criterion) {
     let rust_sm = "../target-bin/palprod-rust-smallest";
     let rust_lg_bolt_opt = "../target-bin/palprod-rust-largest-bolt-optimized";
     let rust_sm_bolt_opt = "../target-bin/palprod-rust-smallest-bolt-optimized";
+    let rust_fn_lg = "../target-bin/palprod-rust-functional-largest";
+    let rust_fn_sm = "../target-bin/palprod-rust-functional-smallest";
+    let rust_fn_lg_bolt_opt = "../target-bin/palprod-rust-functional-largest-bolt-optimized";
+    let rust_fn_sm_bolt_opt = "../target-bin/palprod-rust-functional-smallest-bolt-optimized";
     let go_lg = "../target-bin/palprod-go-largest";
     let go_sm = "../target-bin/palprod-go-smallest";
     let haskell_lg = "../target-bin/palprod-haskell-largest";
@@ -97,6 +101,12 @@ pub fn benches(c: &mut Criterion) {
     // If present, also benchmark PGO/BOLT variants
     if std::path::Path::new(rust_lg_bolt_opt).exists() { bench_servered(c, "RUST+BOLT largest 2..999", rust_lg_bolt_opt, 2, 999); }
     if std::path::Path::new(rust_sm_bolt_opt).exists() { bench_servered(c, "RUST+BOLT smallest 2..999", rust_sm_bolt_opt, 2, 999); }
+
+    bench_servered(c, "RUST (functional)  largest 2..999", rust_fn_lg, 2, 999);
+    bench_servered(c, "RUST (functional)  smallest 2..999", rust_fn_sm, 2, 999);
+    // If present, also benchmark PGO/BOLT variants
+    if std::path::Path::new(rust_lg_bolt_opt).exists() { bench_servered(c, "RUST+BOLT (functional)  largest 2..999", rust_fn_lg_bolt_opt, 2, 999); }
+    if std::path::Path::new(rust_sm_bolt_opt).exists() { bench_servered(c, "RUST+BOLT (functional)  smallest 2..999", rust_fn_sm_bolt_opt, 2, 999); }
 
     bench_servered(c, "GO     largest 2..999", go_lg, 2, 999);
     bench_servered(c, "GO     smallest 2..999", go_sm, 2, 999);

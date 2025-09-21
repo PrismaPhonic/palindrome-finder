@@ -233,22 +233,26 @@ comparisons.
 
 * Current results
 
-Latest average times per iteration:
+Latest average times per iteration (sorted from largest to smallest, then fastest to slowest):
 
-| Implementation    |  Range | Task     | Time      |
-|-------------------+--------+----------+-----------|
-| Haskell           | 2..999 | largest  | 1.6800 µs |
-| Haskell           | 2..999 | smallest | 2.4438 µs |
-| Rust              | 2..999 | largest  | 1.9750 µs |
-| Rust              | 2..999 | smallest | 2.9070 µs |
-| Rust (PGO + Bolt) | 2..999 | largest  | 1.9737 µs |
-| Rust (PGO + Bolt) | 2..999 | smallest | 2.3808 µs |
-| Common Lisp       | 2..999 | largest  | 2.2698 µs |
-| Common Lisp       | 2..999 | smallest | 3.4488 µs |
-| Coalton           | 2..999 | largest  | 2.5336 µs |
-| Coalton           | 2..999 | smallest | 3.6270 µs |
-| Golang            | 2..999 | largest  | 2.5004 µs |
-| Golang            | 2..999 | smallest | 3.7358 µs |
+| Implementation               |  Range | Task     | Time      |
+|------------------------------+--------+----------+-----------|
+| Haskell                      | 2..999 | largest  | 1.6800 µs |
+| Rust Functional              | 2..999 | largest  | 1.7018 µs |
+| Rust Functional (PGO + Bolt) | 2..999 | largest  | 1.8979 µs |
+| Rust (PGO + Bolt)            | 2..999 | largest  | 1.9737 µs |
+| Rust                         | 2..999 | largest  | 1.9750 µs |
+| Common Lisp                  | 2..999 | largest  | 2.2698 µs |
+| Golang                       | 2..999 | largest  | 2.5004 µs |
+| Coalton                      | 2..999 | largest  | 2.5336 µs |
+| Rust Functional (PGO + Bolt) | 2..999 | smallest | 2.0730 µs |
+| Rust (PGO + Bolt)            | 2..999 | smallest | 2.3808 µs |
+| Rust Functional              | 2..999 | smallest | 2.4103 µs |
+| Haskell                      | 2..999 | smallest | 2.4438 µs |
+| Rust                         | 2..999 | smallest | 2.9070 µs |
+| Common Lisp                  | 2..999 | smallest | 3.4488 µs |
+| Coalton                      | 2..999 | smallest | 3.6270 µs |
+| Golang                       | 2..999 | smallest | 3.7358 µs |
 
 * Notes
 - Haskell performance caveat: the Glasgow Haskell Compiler’s native backend was
