@@ -18,12 +18,37 @@
            (cl:the (cl:unsigned-byte 32) (cl:truncate a b)))))
 
  (inline)
+ (declare u32-rem (U32 -> U32 -> U32))
+ (define (u32-rem a b)
+   (lisp U32 (a b)
+         (cl:locally (cl:declare (cl:optimize (cl:speed 3) (cl:safety 0))
+                                 (cl:type (cl:unsigned-byte 32) a b))
+           (cl:the (cl:unsigned-byte 32) (cl:rem a b)))))
+
+ (inline)
  (declare u32-isqrt (U32 -> U32))
  (define (u32-isqrt n)
    (lisp U32 (n)
          (cl:locally (cl:declare (cl:optimize (cl:speed 3) (cl:safety 0))
                                  (cl:type (cl:unsigned-byte 32) n))
            (cl:the (cl:unsigned-byte 32) (cl:isqrt n)))))
+
+ (inline)
+ (declare nonzero-quot-if-divisible (U32 -> U32 -> U32))
+ ;; Rationale: single division for factor pairs.
+ ;; Checking divisibility and then computing the quotient separately would perform two divisions.
+ ;; Coalton also cannot cheaply return (q,r) without callback or tuple allocation.
+ ;; Using CL's truncate once gives both q and r; we return q if r==0 else 0.
+ ;; This compiles to a single idiv plus a remainder test in SBCL, avoiding double work.
+ (define (nonzero-quot-if-divisible dividend divisor)
+   (lisp U32 (dividend divisor)
+        (cl:locally (cl:declare (cl:optimize (cl:speed 3) (cl:safety 0))
+                                (cl:type (cl:unsigned-byte 32) dividend divisor))
+          (cl:multiple-value-bind (q r) (cl:truncate dividend divisor)
+            (cl:declare (cl:type (cl:unsigned-byte 32) q r))
+            (cl:if (cl:zerop r)
+                   (cl:the (cl:unsigned-byte 32) q)
+                   (cl:the (cl:unsigned-byte 32) 0))))))
 
  (inline)
  (declare has-even-digits (U32 -> Boolean))
@@ -41,21 +66,34 @@
 
  (inline)
  (declare is-pal (U32 -> Boolean))
+ ;; Rationale: quotient-only in the half-reverse loop.
+ ;; Coalton cannot directly consume Common Lisp multiple values inside Coalton code.
+ ;; Using CL's truncate to obtain (quotient, remainder) would force one of:
+ ;;   - A CPS callback via coalton:call-coalton-function (adds per-iteration call indirection), or
+ ;;   - Returning a (Tuple U32 U32) (heap allocation + pointer indirection per iteration).
+ ;; Both approaches caused large slowdowns in this hot loop.
+ ;; Instead we compute the quotient once with u32-quot (SBCL strength-reduces /10 to a magic-multiply),
+ ;; then derive the remainder via r = n - q*10. This avoids extra calls/allocations and a second division.
  (define (is-pal n)
      (cond
        ((< n 10) True)
-       ((zero? (mod n 10)) False)
-       ((and (has-even-digits n) (nonzero? (mod n 11))) False)
+       ((== (mod n 10) 0) False)
+       ((and (has-even-digits n) (/= (mod n 11) 0)) False)
        (True
-        (rec half-reverse ((m n) (rev 0))
-             (if (<= m rev)
-                 (or (== m rev)
-                     (== m (u32-quot rev 10)))
-                 (let ((digit (mod m 10)))
-                   (half-reverse (u32-quot m 10) (+ (* rev 10) digit))))))))
+      (rec half-reverse ((m n) (rev 0))
+           (if (<= m rev)
+               (or (== m rev)
+                   (== m (u32-quot rev 10)))
+               (let ((q (u32-quot m 10))
+                     (r (- m (* q 10))))
+                 (half-reverse q (+ (* rev 10) r))))))))
 
  (inline)
  (declare collect-factor-pairs (U32 -> U32 -> U32 -> (array:LispArray U32)))
+ ;; Factor collection uses nonzero-quot-if-divisible to fuse divisibility check
+ ;; and quotient computation into a single division. Returning 0 when not
+ ;; divisible lets us branch once and reuse the quotient directly, avoiding a
+ ;; second division and avoiding tuple/CPS overhead.
  (define (collect-factor-pairs prod lo hi)
      (let ((x-min (max lo (u32-quot (+ prod (- hi 1)) hi)))
            (x-max (min hi (u32-isqrt prod))))
@@ -69,14 +107,13 @@
                              (array:set! out j v)
                              (copy (+ j 1)))))
                     out)
-                  (let ((divisible (zero? (mod prod x))))
-                    (if divisible
-                        (let ((y (u32-quot prod x)))
-                          (let ((j i))
-                            (array:set! buff j x)
-                            (array:set! buff (+ j 1) y))
-                          (fill (+ x 1) (+ i 2)))
-                        (fill (+ x 1) i))))))))
+               (let ((q (nonzero-quot-if-divisible prod x)))
+                 (if (== q 0)
+                     (fill (+ x 1) i)
+                     (let ((j i))
+                       (array:set! buff j x)
+                       (array:set! buff (+ j 1) q)
+                       (fill (+ x 1) (+ i 2))))))))))
 
  (inline)
  (declare smallest-search (U32 -> U32 -> U32))

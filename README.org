@@ -243,21 +243,21 @@ Latest average times per iteration (sorted from largest to smallest, then fastes
 | Implementation               |  Range | Task     | Time      |
 |------------------------------+--------+----------+-----------|
 | Haskell                      | 2..999 | largest  | 1.5724 µs |
-| Rust Functional              | 2..999 | largest  | 1.7381 µs |
+| Rust Functional              | 2..999 | largest  | 1.7374 µs |
 | Rust Functional (PGO + Bolt) | 2..999 | largest  | 1.8917 µs |
 | Rust (PGO + Bolt)            | 2..999 | largest  | 1.9159 µs |
-| Rust                         | 2..999 | largest  | 1.9657 µs |
-| Golang                       | 2..999 | largest  | 2.2171 µs |
-| Common Lisp                  | 2..999 | largest  | 2.2913 µs |
-| Coalton                      | 2..999 | largest  | 2.5740 µs |
+| Rust                         | 2..999 | largest  | 1.9206 µs |
+| Common Lisp                  | 2..999 | largest  | 2.1453 µs |
+| Golang                       | 2..999 | largest  | 2.2421 µs |
+| Coalton                      | 2..999 | largest  | 2.5445 µs |
 | Rust Functional (PGO + Bolt) | 2..999 | smallest | 1.9688 µs |
 | Haskell                      | 2..999 | smallest | 2.0212 µs |
+| Rust Functional              | 2..999 | smallest | 2.1459 µs |
 | Rust (PGO + Bolt)            | 2..999 | smallest | 2.2951 µs |
-| Rust Functional              | 2..999 | smallest | 2.4766 µs |
-| Rust                         | 2..999 | smallest | 2.7379 µs |
-| Golang                       | 2..999 | smallest | 3.0846 µs |
+| Rust                         | 2..999 | smallest | 2.7356 µs |
+| Golang                       | 2..999 | smallest | 3.1415 µs |
 | Common Lisp                  | 2..999 | smallest | 3.1917 µs |
-| Coalton                      | 2..999 | smallest | 3.6518 µs |
+| Coalton                      | 2..999 | smallest | 3.5511 µs |
 |                              |        |          |           |
 * Rust functional implementation
 
@@ -279,6 +279,31 @@ avoid complex match-arm sites that triggered LLVM musttail errors or segfaults.
 - All languages use a numeric half-reversal palindrome check (no strings).
 - The Common Lisp code adds type declarations to encourage fixnum arithmetic in SBCL.
 - We apply pruning (outer and inner) and early exits (for example divisibility by 11 on even-digit products) to reduce calls to the palindrome predicate.
+
+* Coalton performance caveats and learnings
+
+Coalton is great for clarity, but there are important performance caveats for hot paths:
+
++ Zero?/nonzero? class dispatch:
+  Using =zero?= and =nonzero?= is elegant, but these are class-based and can add pointer dispatch overhead. In tight loops prefer direct comparisons (=== 0=, =/= 0=) on concrete unboxed numeric types.
++ No multiple values in Coalton:
+  Coalton cannot directly consume Common Lisp multiple values, so idioms like =(multiple-value-bind (q r) (truncate ...))= don’t map cleanly. Wrapping into a =Tuple= allocates and adds pointer indirection; CPS via =coalton:call-coalton-function= adds per-iteration call indirection. In hot loops, prefer computing the quotient once and deriving the remainder (e.g., =q = n / 10= then =r = n - q*10=), which SBCL strength-reduces to a single magic-multiply sequence.
++ Option/Result are not zero-cost:
+  Unlike Rust, Coalton’s =Optional= and =Result= involve heap allocation/boxing at boundaries. Keep them out of inner loops; construct results at the edges of computations.
++ Fusing div/mod work:
+  There’s no zero-cost way in Coalton to return both quotient and remainder without extra allocation or calls. For non-constant divisors (e.g., factor checks), fuse the operations via one CL =truncate= and branch on the remainder, reusing the quotient. Our helper =nonzero-quot-if-divisible= encodes this and compiles to a single =idiv= plus a remainder test.
++ Recursion and inlining limits:
+  Coalton’s pure style encourages recursion, but the compiler may refuse to inline recursive functions (stack frame size, heuristics), introducing call overhead. Prefer simple loops encoded as tail recursion that the compiler can flatten, or move arithmetic into small =inline= CL-backed helpers.
++ Allocation awareness:
+  Returning =Tuple= or building temporary collections inside hot loops causes per-iteration allocation and GC pressure. Use unboxed arithmetic, avoid tuples in inner loops, and preallocate scratch storage (e.g., a small =LispArray U32=) if needed.
++ Bridge boundaries:
+  Crossing Coalton↔CL via =lisp= forms is fast for arithmetic when returning unboxed scalars, but calling Coalton lambdas back from CL requires =coalton:call-coalton-function= (function-entry application) and is costly per-iteration. Avoid CPS patterns in hot loops.
+
+Practical patterns we adopted:
+
+- Palindrome half-reverse: compute =q= once, derive =r= via =r = n - q*10=.
+- Factor pairs: use a helper that returns the quotient-or-zero from a single =truncate= and branch once.
+- Keep Optional construction at function boundaries, not in inner loops.
 
 Verification utilities:
 - =test_correctness.sh= cross-checks all server binaries (range 1..999) and
