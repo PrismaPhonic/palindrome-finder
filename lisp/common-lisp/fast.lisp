@@ -47,19 +47,19 @@
 (declaim
  (ftype (function (word32) boolean) palindromep)
  (ftype (function (word32) boolean) even-digit-count-p)
- (ftype (function ((simple-array (unsigned-byte 32) (*)) word32)
-                 (simple-array (unsigned-byte 32) (*)))
+ (ftype (function ((simple-array word32 (*)) word32)
+                 (simple-array word32 (*)))
         finalize-factor-buffer)
  (ftype (function (word32 word32 word32)
-                 (simple-array (unsigned-byte 32) (*)))
+                 (simple-array word32 (*)))
         collect-positive-factor-pairs)
  (ftype (function (word32 word32)
                  (values (or null word32)
-                         (or null (simple-array (unsigned-byte 32) (*)))))
+                         (or null (simple-array word32 (*)))))
         smallest-inner largest-inner)
  (ftype (function (word32 word32) (values (or null word32) list))
         smallest largest)
- (ftype (function ((or null (simple-array (unsigned-byte 32) (*)))) list)
+ (ftype (function ((or null (simple-array word32 (*)))) list)
         pairs-vector->list))
 
 (declaim (inline palindromep even-digit-count-p
@@ -114,10 +114,10 @@
   (let ((m n) (rev 0))
     (declare (type word32 m rev))
     (loop while (> m rev) do
-      (let ((digit (the (integer 0 9) (rem m 10))))
-        (declare (type (integer 0 9) digit))
-        (setf rev (the word32 (+ (the word32 (* rev 10)) digit))
-              m   (the word32 (truncate m 10)))))
+      (multiple-value-bind (q r) (truncate m 10)
+        (declare (type word32 q r))
+        (setf rev (the word32 (+ (the word32 (* rev 10)) r))
+              m   q)))
 
     ;; even length: m == rev; odd length: m == rev/10
     (or (eql m rev)
@@ -133,11 +133,11 @@
    avoid   pointer chasing. We finalize into a correctly sized output array with
    this helper"
   (declare (optimize (speed 3) (safety 0) (debug 0))
-           (type (simple-array (unsigned-byte 32) (*)) buffer)
+           (type (simple-array word32 (*)) buffer)
            (type word32 count)
            (dynamic-extent buffer))
-  (let ((out (make-array count :element-type '(unsigned-byte 32))))
-    (declare (type (simple-array (unsigned-byte 32) (*)) out))
+  (let ((out (make-array count :element-type 'word32)))
+    (declare (type (simple-array word32 (*)) out))
     (loop for i of-type word32 from 0 below count do
       (setf (aref out i) (aref buffer i)))
     out))
@@ -146,26 +146,27 @@
   "Return flat vector [x0 y0 x1 y1 ...] for product > 0; empty if none."
   (declare (optimize (speed 3) (safety 0) (debug 0))
            (type word32 product min max))
-  (let* ((sqrtp (the word32 (isqrt product)))
-         (low   (max min (truncate (+ product max -1) max)))
+  (let* ((sqrtp (the word32 (u32-isqrt product)))
+         (low   (max min (u32-ceil-div product max)))
          (high  (min max sqrtp))
          ;; align buffer capacity with other languages (4 elements = 2 pairs)
-         (buff (make-array 4 :element-type '(unsigned-byte 32)))
-         (count 0))
+         (buff (make-array 4 :element-type 'word32))
+         (count (the word32 0)))
     (declare (type word32 sqrtp low high count)
-             (type (simple-array (unsigned-byte 32) (*)) buff)
+             (type (simple-array word32 (*)) buff)
              (dynamic-extent buff))
     (loop for x of-type word32 from low to high do
-      (when (zerop (mod product x))
-        (let ((y (truncate product x)))
+      (multiple-value-bind (q r) (truncate product x)
+        (declare (type word32 q r))
+        (when (zerop r)
           (setf (aref buff count) x
-                (aref buff (1+ count)) y)
-          (incf count 2))))
+                (aref buff (1+ count)) q)
+          (setf count (the word32 (+ count 2))))))
     (finalize-factor-buffer buff count)))
 
 (defun pairs-vector->list (vec)
   "Convert flat vector [x0 y0 x1 y1 ...] to ((x y) ...)."
-  (declare (type (or null (simple-array (unsigned-byte 32) (*))) vec))
+  (declare (type (or null (simple-array word32 (*))) vec))
   (if (or (null vec) (zerop (length vec)))
       nil
       (let ((out '()))
@@ -303,6 +304,5 @@ This mirrors the smallest optimization and further reduces palindromep calls."
     (if prod
         (values prod (pairs-vector->list vec))
         (values nil nil))))
-
 
 

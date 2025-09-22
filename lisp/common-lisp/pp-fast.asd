@@ -1,4 +1,6 @@
 (defsystem "pp-fast"
   :serial t
-  :components ((:file "fast")))
+  :components ((:file "package")
+               (:file "math")
+               (:file "fast")))
 
