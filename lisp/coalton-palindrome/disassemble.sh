@@ -24,6 +24,8 @@ mkdir -p "$SCRIPT_DIR/asm"
   --eval "(asdf:load-system \"coalton-palindrome\")" \
   --eval "(asdf:load-asd \"$REPO_DIR/lisp/common-lisp/pp-fast.asd\")" \
   --eval "(asdf:load-system \"pp-fast\")" \
+  --eval "(load \"$SCRIPT_DIR/src/runner-largest.lisp\")" \
+  --eval "(load \"$SCRIPT_DIR/src/runner-smallest.lisp\")" \
   --eval "(progn
     (flet ((safe-disassemble (sym pkg path)
              (multiple-value-bind (s status) (find-symbol sym pkg)
@@ -40,5 +42,7 @@ mkdir -p "$SCRIPT_DIR/asm"
       (safe-disassemble \"SMALLEST-INNER\" \"PP-FAST\" \"$SCRIPT_DIR/asm/cl-smallest-inner.asm\")
       (safe-disassemble \"LARGEST-INNER\" \"PP-FAST\" \"$SCRIPT_DIR/asm/cl-largest-inner.asm\")
       (safe-disassemble \"PALINDROMEP\" \"PP-FAST\" \"$SCRIPT_DIR/asm/cl-palindromep.asm\")
+      (safe-disassemble \"%DO-ITERS\" \"COALTON-PALINDROME-SMALLEST\" \"$SCRIPT_DIR/asm/coalton-runner-smallest-doiters.asm\")
+      (safe-disassemble \"%DO-ITERS\" \"COALTON-PALINDROME-LARGEST\" \"$SCRIPT_DIR/asm/coalton-runner-largest-doiters.asm\")
       (format t \"Disassembly complete!~%\")))" \
   --quit

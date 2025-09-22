@@ -5,7 +5,7 @@
 
 (load "../gc.lisp")
 (load "args.lisp")
-(load "utility.lisp")
+(load "../utility.lisp")
 
 (declaim (ftype (function (pp-fast::word32 pp-fast::word32 pp-fast::word32)
                           (values pp-fast::word32 (unsigned-byte 64)))
