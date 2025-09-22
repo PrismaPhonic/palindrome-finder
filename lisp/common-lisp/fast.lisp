@@ -41,6 +41,7 @@
 
 ;; 32-bit unsigned integer alias for readability and zero-cost typing
 (deftype word32 () '(unsigned-byte 32))
+(deftype word64 () '(unsigned-byte 64))
 (defconstant +word32-max+ #xFFFFFFFF)
 
 ;; ftypes so SBCL propagates types
@@ -67,6 +68,28 @@
                 collect-positive-factor-pairs
                 pairs-vector->list
                 smallest-inner largest-inner))
+
+;; Inline divmod binder for word32 with consistent type declarations
+(defmacro with-divmod ((q r) (num den) &body body)
+  `(multiple-value-bind (,q ,r) (truncate ,num ,den)
+     (declare (type word32 ,q ,r))
+     ,@body))
+
+;; Tight summation for (simple-array word32 (*)) -> (unsigned-byte 64)
+(declaim (inline sum-ub32-vector)
+         (ftype (function ((or null (simple-array word32 (*)))) word64)
+                sum-ub32-vector))
+(defun sum-ub32-vector (vec)
+  (declare (optimize (speed 3) (safety 0) (debug 0))
+           (type (or null (simple-array word32 (*))) vec))
+  (let ((acc (the word64 0)))
+    (declare (type word64 acc))
+    (when vec
+      (let ((len (length vec)))
+        (declare (type fixnum len))
+        (loop for i of-type fixnum from 0 below len do
+          (incf acc (the word64 (aref vec i))))))
+    (the word64 acc)))
 
 ;; ------------------------------------------------------------------
 
@@ -114,8 +137,7 @@
   (let ((m n) (rev 0))
     (declare (type word32 m rev))
     (loop while (> m rev) do
-      (multiple-value-bind (q r) (truncate m 10)
-        (declare (type word32 q r))
+      (with-divmod (q r) (m 10)
         (setf rev (the word32 (+ (the word32 (* rev 10)) r))
               m   q)))
 
@@ -156,8 +178,7 @@
              (type (simple-array word32 (*)) buff)
              (dynamic-extent buff))
     (loop for x of-type word32 from low to high do
-      (multiple-value-bind (q r) (truncate product x)
-        (declare (type word32 q r))
+      (with-divmod (q r) (product x)
         (when (zerop r)
           (setf (aref buff count) x
                 (aref buff (1+ count)) q)
