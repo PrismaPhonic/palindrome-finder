@@ -3,7 +3,7 @@
 # Build script for Go palindrome binaries
 # This script builds the Go binaries and copies them to the target-bin directory
 
-set -e
+set -euo pipefail
 
 echo "Building Go palindrome binaries..."
 
@@ -24,3 +24,9 @@ echo "Go binaries built successfully!"
 echo "Binaries available in target-bin/:"
 echo "  - palprod-go-smallest"
 echo "  - palprod-go-largest"
+
+cat <<'EOF'
+
+Tip: Go 1.21+ supports PGO (Profile-Guided Optimization). Use build-pgo.sh to
+generate a CPU profile via --server and build optimized binaries.
+EOF

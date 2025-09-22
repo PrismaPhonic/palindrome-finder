@@ -88,6 +88,8 @@ pub fn benches(c: &mut Criterion) {
     let rust_fn_sm_bolt_opt = "../target-bin/palprod-rust-functional-smallest-bolt-optimized";
     let go_lg = "../target-bin/palprod-go-largest";
     let go_sm = "../target-bin/palprod-go-smallest";
+    let go_lg_pgo = "../target-bin/palprod-go-largest-pgo";
+    let go_sm_pgo = "../target-bin/palprod-go-smallest-pgo";
     let haskell_lg = "../target-bin/palprod-haskell-largest";
     let haskell_sm = "../target-bin/palprod-haskell-smallest";
     let coalton_lg = "../target-bin/palprod-coalton-largest";
@@ -113,6 +115,8 @@ pub fn benches(c: &mut Criterion) {
 
     bench_servered(c, "GO     largest 2..999", go_lg, 2, 999);
     bench_servered(c, "GO     smallest 2..999", go_sm, 2, 999);
+    if std::path::Path::new(go_lg_pgo).exists() { bench_servered(c, "GO+PGO largest 2..999", go_lg_pgo, 2, 999); }
+    if std::path::Path::new(go_sm_pgo).exists() { bench_servered(c, "GO+PGO smallest 2..999", go_sm_pgo, 2, 999); }
 
     bench_servered(c, "Haskell largest 2..999", haskell_lg, 2, 999);
     bench_servered(c, "Haskell smallest 2..999", haskell_sm, 2, 999);

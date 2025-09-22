@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"runtime/pprof"
 	"strconv"
 
 	"palindrome"
@@ -42,7 +43,38 @@ func doIters(min, max uint32, iters uint32) (uint32, uint32) {
 
 func main() {
 	args := os.Args
-	if len(args) > 1 && args[1] == "--server" {
+
+	// Detect optional CPU profile flag (only used with --server)
+	cpuProfilePath := ""
+	serverMode := false
+	for i := 1; i < len(args); i++ {
+		if args[i] == "--server" {
+			serverMode = true
+		}
+		if args[i] == "--cpu-profile" && i+1 < len(args) {
+			cpuProfilePath = args[i+1]
+			i++
+		}
+	}
+
+	if serverMode {
+		var f *os.File
+		if cpuProfilePath != "" {
+			var err error
+			f, err = os.Create(cpuProfilePath)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "failed to create cpu profile file: %v\n", err)
+				os.Exit(2)
+			}
+			if err := pprof.StartCPUProfile(f); err != nil {
+				fmt.Fprintf(os.Stderr, "failed to start cpu profiler: %v\n", err)
+				os.Exit(2)
+			}
+			defer func() {
+				pprof.StopCPUProfile()
+				_ = f.Close()
+			}()
+		}
 		palindrome.RunServer(doIters)
 		return
 	}

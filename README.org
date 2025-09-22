@@ -121,6 +121,23 @@ cd go-palindrome
 ./build.sh
 #+END_SRC
 
+** Go (PGO)
+Go 1.21+ supports profile-guided optimization. We provide a script to collect a CPU profile using the same server workload as Rust and rebuild with PGO enabled.
+
+#+BEGIN_SRC shell
+cd go-palindrome
+# Optional: override workload size (defaults shown)
+ITERS=15000000 WARMUP=250000 ./build-pgo.sh
+#+END_SRC
+
+This produces the following additional binaries in =target-bin/=: 
+- palprod-go-smallest-pgo
+- palprod-go-largest-pgo
+
+Notes:
+- Our Criterion runs include these as “GO+PGO …” when present.
+- On this specific workload and hardware, we observed strictly worse performance for GO+PGO compared to non-PGO builds. We still include them for completeness so readers can see the impact. Results may vary depending on profile representativeness and Go version. See the Go PGO docs for details: [Go PGO docs](https://go.dev/doc/pgo).
+
 ** Coalton
 Build the Coalton solution and copy the binaries to =target-bin/=:
 
@@ -248,14 +265,16 @@ Latest average times per iteration (sorted from largest to smallest, then fastes
 | Rust (PGO + Bolt)            | 2..999 | largest  | 1.9159 µs |
 | Rust                         | 2..999 | largest  | 1.9206 µs |
 | Common Lisp                  | 2..999 | largest  | 2.1453 µs |
-| Golang                       | 2..999 | largest  | 2.2421 µs |
+| Golang                       | 2..999 | largest  | 2.1613 µs |
+| Golang (PGO)                 | 2..999 | largest  | 2.2364 µs |
 | Coalton                      | 2..999 | largest  | 2.5445 µs |
 | Rust Functional (PGO + Bolt) | 2..999 | smallest | 1.9688 µs |
 | Haskell                      | 2..999 | smallest | 2.0212 µs |
 | Rust Functional              | 2..999 | smallest | 2.1459 µs |
 | Rust (PGO + Bolt)            | 2..999 | smallest | 2.2951 µs |
 | Rust                         | 2..999 | smallest | 2.7356 µs |
-| Golang                       | 2..999 | smallest | 3.1415 µs |
+| Golang                       | 2..999 | smallest | 3.0668 µs |
+| Golang (PGO)                 | 2..999 | smallest | 3.2585 µs |
 | Common Lisp                  | 2..999 | smallest | 3.1917 µs |
 | Coalton                      | 2..999 | smallest | 3.5511 µs |
 |                              |        |          |           |
