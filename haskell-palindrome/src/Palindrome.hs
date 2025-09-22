@@ -83,9 +83,9 @@ isPalindrome n
             if m <= rev
               then m == rev || m == (rev `quot` 10)
               else
-                let digit = m `rem` 10
+                let (q, digit) = m `quotRem` 10
                     newRev = rev * 10 + digit
-                in loop (m `quot` 10) newRev
+                in loop q newRev
       in loop n 0
 
 
@@ -100,8 +100,9 @@ collectPositiveFactorPairs product minVal maxVal = runST $ do
   arr <- newArray (0, maxPairs - 1) 0 :: ST s (STUArray s Int Word32)
   let go !count !x
         | x > high || count >= maxPairs = return count
-        | product `rem` x == 0 = do
-            let y = product `quot` x
+        | let (q, r) = product `quotRem` x
+        , r == 0 = do
+            let y = q
             writeArray arr count x
             writeArray arr (count + 1) y
             go (count + 2) (x + 1)
