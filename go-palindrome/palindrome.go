@@ -4,11 +4,9 @@ package palindrome
 
 import (
 	"bufio"
-	"fmt"
+	"bytes"
 	"io"
 	"os"
-	"strconv"
-	"strings"
 )
 
 // hasEvenDigits returns true if n has an even number of decimal digits.
@@ -224,10 +222,12 @@ func RunServer(doIters func(uint32, uint32, uint32) (uint32, uint32)) {
 	writer := bufio.NewWriter(os.Stdout)
 	defer writer.Flush()
 
-	var min, max *uint32
+	var min uint32
+	var max uint32
 
 	for {
-		line, err := reader.ReadString('\n')
+		// Read a line without allocating a new string
+		line, err := reader.ReadSlice('\n')
 		if err == io.EOF {
 			break
 		}
@@ -235,81 +235,112 @@ func RunServer(doIters func(uint32, uint32, uint32) (uint32, uint32)) {
 			panic(err)
 		}
 
-		parts := strings.Fields(strings.TrimSpace(line))
-		if len(parts) == 0 {
+		// Trim trailing \n and optional \r
+		if len(line) > 0 && line[len(line)-1] == '\n' {
+			line = line[:len(line)-1]
+		}
+		if len(line) > 0 && line[len(line)-1] == '\r' {
+			line = line[:len(line)-1]
+		}
+
+		// Skip leading spaces
+		i := 0
+		for i < len(line) && line[i] == ' ' {
+			i++
+		}
+		if i >= len(line) {
 			continue
 		}
 
-		cmd := strings.ToUpper(parts[0])
-		switch cmd {
-		case "INIT":
-			if len(parts) != 3 {
-				fmt.Fprintln(writer, "ERR BADARGS")
-				writer.Flush()
-				continue
+		// Extract command token (case-sensitive, expect upper-case from harness)
+		start := i
+		for i < len(line) && line[i] != ' ' {
+			i++
+		}
+		cmd := line[start:i]
+
+		// Advance past spaces to first arg (if any)
+		for i < len(line) && line[i] == ' ' {
+			i++
+		}
+
+		// Helper to read next field slice [i:j]
+		nextField := func() []byte {
+			j := i
+			for j < len(line) && line[j] != ' ' {
+				j++
 			}
-			a64, err1 := strconv.ParseUint(parts[1], 10, 32)
-			b64, err2 := strconv.ParseUint(parts[2], 10, 32)
-			if err1 != nil || err2 != nil {
-				fmt.Fprintln(writer, "ERR BADARGS")
-				writer.Flush()
-				continue
+			field := line[i:j]
+			i = j
+			for i < len(line) && line[i] == ' ' {
+				i++
 			}
-			a := uint32(a64)
-			b := uint32(b64)
-			min = &a
-			max = &b
-			fmt.Fprintln(writer, "OK")
+			return field
+		}
+
+		switch {
+		case bytes.Equal(cmd, []byte("INIT")):
+			aBytes := nextField()
+			bBytes := nextField()
+			min = parseUint32(aBytes)
+			max = parseUint32(bBytes)
+			writer.WriteString("OK\n")
 			writer.Flush()
 
-		case "WARMUP":
-			if len(parts) != 2 {
-				fmt.Fprintln(writer, "ERR BADARGS")
-				writer.Flush()
-				continue
-			}
-			iters64, err := strconv.ParseUint(parts[1], 10, 32)
-			if err != nil {
-				fmt.Fprintln(writer, "ERR BADARGS")
-				writer.Flush()
-				continue
-			}
-			iters := uint32(iters64)
-			if min != nil && max != nil {
-				_, _ = doIters(*min, *max, iters)
-			}
-			fmt.Fprintln(writer, "OK")
+		case bytes.Equal(cmd, []byte("WARMUP")):
+			itBytes := nextField()
+			iters := parseUint32(itBytes)
+			_, _ = doIters(min, max, iters)
+			writer.WriteString("OK\n")
 			writer.Flush()
 
-		case "RUN":
-			if len(parts) != 2 {
-				fmt.Fprintln(writer, "ERR BADARGS")
-				writer.Flush()
-				continue
-			}
-			iters64, err := strconv.ParseUint(parts[1], 10, 32)
-			if err != nil {
-				fmt.Fprintln(writer, "ERR BADARGS")
-				writer.Flush()
-				continue
-			}
-			iters := uint32(iters64)
-			if min != nil && max != nil {
-				prod, acc := doIters(*min, *max, iters)
-				fmt.Fprintf(writer, "OK %d %d\n", prod, acc)
-			} else {
-				fmt.Fprintln(writer, "ERR NOTINIT")
-			}
+		case bytes.Equal(cmd, []byte("RUN")):
+			itBytes := nextField()
+			iters := parseUint32(itBytes)
+			prod, acc := doIters(min, max, iters)
+			// Write: OK <prod> <acc>\n without fmt
+			var buf [64]byte
+			out := buf[:0]
+			out = append(out, 'O', 'K', ' ')
+			out = appendUint32(out, prod)
+			out = append(out, ' ')
+			out = appendUint32(out, acc)
+			out = append(out, '\n')
+			writer.Write(out)
 			writer.Flush()
 
-		case "QUIT":
+		case bytes.Equal(cmd, []byte("QUIT")):
 			return
 
 		default:
-			fmt.Fprintln(writer, "ERR BADCMD")
-			writer.Flush()
+			// Assume proper use; ignore unknown commands
 		}
 	}
+}
+
+// parseUint32 parses a base-10 unsigned integer from a byte slice with no checks.
+// Assumes well-formed ASCII digits within uint32 range.
+func parseUint32(b []byte) uint32 {
+	var v uint32
+	for _, c := range b {
+		v = v*10 + uint32(c-'0')
+	}
+	return v
+}
+
+// appendUint32 appends the decimal representation of v to dst without allocations.
+func appendUint32(dst []byte, v uint32) []byte {
+	if v == 0 {
+		return append(dst, '0')
+	}
+	var buf [10]byte
+	i := len(buf)
+	for v > 0 {
+		i--
+		buf[i] = byte('0' + v%10)
+		v /= 10
+	}
+	return append(dst, buf[i:]...)
 }
 
 // fastIsqrt computes the integer square root using Newton's method with bit manipulation

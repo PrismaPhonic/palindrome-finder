@@ -59,7 +59,6 @@
 //! compare the designs side-by-side.
 
 use std::io::{BufRead, BufReader, Write};
-use std::str::FromStr;
 
 use arrayvec::ArrayVec;
 
@@ -296,52 +295,114 @@ where
     let mut reader = BufReader::new(stdin.lock());
     let mut writer = std::io::BufWriter::new(stdout.lock());
 
-    let mut line = String::new();
-    let mut min: Option<u32> = None;
-    let mut max: Option<u32> = None;
+    let mut buf: Vec<u8> = Vec::with_capacity(256);
+    let mut have_range = false;
+    let mut min: u32 = 0;
+    let mut max: u32 = 0;
 
     loop {
-        line.clear();
-        if reader.read_line(&mut line).unwrap_or(0) == 0 {
-            break; // EOF
+        buf.clear();
+        if reader.read_until(b'\n', &mut buf).unwrap_or(0) == 0 {
+            break;
         }
-        let mut parts = line.split_whitespace();
-        let cmd = parts.next().unwrap_or("").to_ascii_uppercase();
-        match cmd.as_str() {
-            "INIT" => {
-                let a = u32::from_str(parts.next().unwrap_or("")).unwrap();
-                let b = u32::from_str(parts.next().unwrap_or("")).unwrap();
-                min = Some(a);
-                max = Some(b);
-                writeln!(writer, "OK").unwrap();
-                writer.flush().unwrap();
+        // Trim trailing \n and optional \r
+        if let Some(&b'\n') = buf.last() { buf.pop(); }
+        if let Some(&b'\r') = buf.last() { buf.pop(); }
+
+        // Skip leading spaces
+        let mut i = 0usize;
+        while i < buf.len() && buf[i] == b' ' { i += 1; }
+        if i >= buf.len() { continue; }
+
+        // Read command token [start..i)
+        let start = i;
+        while i < buf.len() && buf[i] != b' ' { i += 1; }
+        let cmd = &buf[start..i];
+        while i < buf.len() && buf[i] == b' ' { i += 1; }
+
+        // Helper: next field slice
+        let mut next_field = || {
+            let s = i;
+            while i < buf.len() && buf[i] != b' ' { i += 1; }
+            let field = &buf[s..i];
+            while i < buf.len() && buf[i] == b' ' { i += 1; }
+            field
+        };
+
+        if cmd == b"INIT" {
+            let a_bytes = next_field();
+            let b_bytes = next_field();
+            min = parse_u32(a_bytes);
+            max = parse_u32(b_bytes);
+            have_range = true;
+            writer.write_all(b"OK\n").unwrap();
+            writer.flush().unwrap();
+        } else if cmd == b"WARMUP" {
+            let it_bytes = next_field();
+            let iters = parse_u64(it_bytes);
+            if have_range { let _ = do_iters(min, max, iters); }
+            writer.write_all(b"OK\n").unwrap();
+            writer.flush().unwrap();
+        } else if cmd == b"RUN" {
+            let it_bytes = next_field();
+            let iters = parse_u64(it_bytes);
+            if have_range {
+                let (prod_opt, acc) = do_iters(min, max, iters);
+                let prod = prod_opt.unwrap_or(0);
+                let mut out = [0u8; 64];
+                let mut p = 0usize;
+                out[p..p+3].copy_from_slice(b"OK "); p += 3;
+                p += append_u32(&mut out[p..], prod);
+                out[p] = b' '; p += 1;
+                p += append_u64(&mut out[p..], acc);
+                out[p] = b'\n'; p += 1;
+                writer.write_all(&out[..p]).unwrap();
+            } else {
+                writer.write_all(b"ERR NOTINIT\n").unwrap();
             }
-            "WARMUP" => {
-                let iters = u64::from_str(parts.next().unwrap_or("")).unwrap();
-                if let (Some(a), Some(b)) = (min, max) {
-                    let _ = do_iters(a, b, iters);
-                }
-                writeln!(writer, "OK").unwrap();
-                writer.flush().unwrap();
-            }
-            "RUN" => {
-                let iters = u64::from_str(parts.next().unwrap_or("")).unwrap();
-                if let (Some(a), Some(b)) = (min, max) {
-                    let (prod_opt, acc) = do_iters(a, b, iters);
-                    let prod = prod_opt.unwrap_or_default();
-                    writeln!(writer, "OK {prod} {acc}").unwrap();
-                } else {
-                    writeln!(writer, "ERR NOTINIT").unwrap();
-                }
-                writer.flush().unwrap();
-            }
-            "QUIT" => break,
-            _ => {
-                writeln!(writer, "ERR BADCMD").unwrap();
-                writer.flush().unwrap();
-            }
+            writer.flush().unwrap();
+        } else if cmd == b"QUIT" {
+            break;
+        } else {
+            // Assume proper use; ignore unknown commands
         }
     }
+}
+
+#[inline]
+fn parse_u32(bytes: &[u8]) -> u32 {
+    let mut v: u32 = 0;
+    for &c in bytes { v = v.wrapping_mul(10).wrapping_add((c - b'0') as u32); }
+    v
+}
+
+#[inline]
+fn parse_u64(bytes: &[u8]) -> u64 {
+    let mut v: u64 = 0;
+    for &c in bytes { v = v.wrapping_mul(10).wrapping_add((c - b'0') as u64); }
+    v
+}
+
+// Append decimal without allocation; returns bytes written
+#[inline]
+fn append_u32(dst: &mut [u8], mut v: u32) -> usize {
+    if v == 0 { dst[0] = b'0'; return 1; }
+    let mut tmp = [0u8; 10];
+    let mut i = 0;
+    while v > 0 { tmp[i] = b'0' + (v % 10) as u8; v /= 10; i += 1; }
+    // reverse into dst
+    for j in 0..i { dst[j] = tmp[i - 1 - j]; }
+    i
+}
+
+#[inline]
+fn append_u64(dst: &mut [u8], mut v: u64) -> usize {
+    if v == 0 { dst[0] = b'0'; return 1; }
+    let mut tmp = [0u8; 20];
+    let mut i = 0;
+    while v > 0 { tmp[i] = b'0' + (v % 10) as u8; v /= 10; i += 1; }
+    for j in 0..i { dst[j] = tmp[i - 1 - j]; }
+    i
 }
 
 #[cfg(test)]

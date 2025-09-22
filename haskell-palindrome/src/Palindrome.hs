@@ -1,6 +1,7 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE Strict #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Palindrome
   ( smallest
@@ -17,11 +18,14 @@ import Data.Array.Unboxed (UArray, listArray, (!), bounds)
 import Data.Array.ST (STUArray, newArray, readArray, writeArray, freeze)
 import Control.Monad.ST (ST, runST)
 import Control.Monad (forM_)
-import Data.Word (Word32)
+import Data.Word (Word32, Word8)
 import Data.Maybe (Maybe(..))
 import Data.List (sort)
-import Data.Char (toUpper)
-import System.IO (hFlush, stdout)
+import System.IO (hFlush, stdout, stdin)
+import qualified Data.ByteString as BS
+import qualified Data.ByteString.Char8 as C8
+import qualified Data.ByteString.Builder as BB
+import qualified Data.ByteString.Lazy as LBS
 import GHC.Word (Word32(..))
 
 
@@ -184,46 +188,61 @@ largest minVal maxVal = case searchLargest minVal maxVal of
 -- | Server protocol implementation
 runServer :: (Word32 -> Word32 -> Word32 -> (Word32, Word32)) -> IO ()
 runServer doIters = do
-  let loop minVal maxVal = do
-        line <- getLine
-        let parts = words line
-            cmd = case parts of
-                    []    -> ""
-                    (p:_) -> map toUpper p
-        case cmd of
-          "INIT" -> do
-            let a = read (parts !! 1) :: Word32
-                b = read (parts !! 2) :: Word32
-            putStrLn "OK"
+  let loop mVal xVal = do
+        line <- C8.hGetLine stdin
+        let (cmd, rest1) = C8.break (== ' ') line
+            rest1' = C8.dropWhile (== ' ') rest1
+        if cmd == "INIT"
+          then do
+            let (aBS, rest2) = C8.break (== ' ') rest1'
+                rest2' = C8.dropWhile (== ' ') rest2
+                (bBS, _) = C8.break (== ' ') rest2'
+                a = parseW32 aBS
+                b = parseW32 bBS
+            C8.hPutStrLn stdout "OK"
             hFlush stdout
             loop (Just a) (Just b)
-          "WARMUP" -> do
-            let iters = read (parts !! 1) :: Word32
-            case (minVal, maxVal) of
+          else if cmd == "WARMUP"
+          then do
+            let itBS = rest1'
+                iters = parseW32 itBS
+            case (mVal, xVal) of
               (Just a, Just b) -> do
-                let (p,c) = doIters a b (fromIntegral iters)
-                p `seq` c `seq` putStrLn "OK"
+                let (p, c) = doIters a b iters
+                p `seq` c `seq` C8.hPutStrLn stdout "OK"
                 hFlush stdout
-                loop minVal maxVal
+                loop mVal xVal
               _ -> do
-                putStrLn "ERR NOTINIT"
+                C8.hPutStrLn stdout "ERR NOTINIT"
                 hFlush stdout
-                loop minVal maxVal
-          "RUN" -> do
-            let iters = read (parts !! 1) :: Word32
-            case (minVal, maxVal) of
+                loop mVal xVal
+          else if cmd == "RUN"
+          then do
+            let itBS = rest1'
+                iters = parseW32 itBS
+            case (mVal, xVal) of
               (Just a, Just b) -> do
-                let (prod, cnt) = doIters a b (fromIntegral iters)
-                cnt `seq` putStrLn $ "OK " ++ show prod ++ " " ++ show cnt
+                let (prod, cnt) = doIters a b iters
+                    bld = BB.byteString "OK " <> BB.word32Dec prod <> BB.char8 ' ' <> BB.word32Dec cnt <> BB.char8 '\n'
+                LBS.hPut stdout (BB.toLazyByteString bld)
                 hFlush stdout
-                loop minVal maxVal
+                loop mVal xVal
               _ -> do
-                putStrLn "ERR NOTINIT"
+                C8.hPutStrLn stdout "ERR NOTINIT"
                 hFlush stdout
-                loop minVal maxVal
-          "QUIT" -> return ()
-          _ -> do
-            putStrLn "ERR BADCMD"
+                loop mVal xVal
+          else if cmd == "QUIT"
+          then return ()
+          else do
+            C8.hPutStrLn stdout "ERR BADCMD"
             hFlush stdout
-            loop minVal maxVal
+            loop mVal xVal
   loop Nothing Nothing
+
+-- Parse unsigned decimal Word32 from ASCII bytes
+{-# INLINE parseW32 #-}
+parseW32 :: BS.ByteString -> Word32
+parseW32 = BS.foldl' step 0
+  where
+    step :: Word32 -> Word8 -> Word32
+    step acc w = acc * 10 + fromIntegral (w - 48)
