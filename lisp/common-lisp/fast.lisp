@@ -64,32 +64,10 @@
         pairs-vector->list))
 
 (declaim (inline palindromep even-digit-count-p
-                finalize-factor-buffer
-                collect-positive-factor-pairs
-                pairs-vector->list
-                smallest-inner largest-inner))
-
-;; Inline divmod binder for word32 with consistent type declarations
-(defmacro with-divmod ((q r) (num den) &body body)
-  `(multiple-value-bind (,q ,r) (truncate ,num ,den)
-     (declare (type word32 ,q ,r))
-     ,@body))
-
-;; Tight summation for (simple-array word32 (*)) -> (unsigned-byte 64)
-(declaim (inline sum-ub32-vector)
-         (ftype (function ((or null (simple-array word32 (*)))) word64)
-                sum-ub32-vector))
-(defun sum-ub32-vector (vec)
-  (declare (optimize (speed 3) (safety 0) (debug 0))
-           (type (or null (simple-array word32 (*))) vec))
-  (let ((acc (the word64 0)))
-    (declare (type word64 acc))
-    (when vec
-      (let ((len (length vec)))
-        (declare (type fixnum len))
-        (loop for i of-type fixnum from 0 below len do
-          (incf acc (the word64 (aref vec i))))))
-    (the word64 acc)))
+               finalize-factor-buffer
+               collect-positive-factor-pairs
+               pairs-vector->list
+               smallest-inner largest-inner))
 
 ;; ------------------------------------------------------------------
 
@@ -141,9 +119,9 @@
         (setf rev (the word32 (+ (the word32 (* rev 10)) r))
               m   q)))
 
-    ;; even length: m == rev; odd length: m == rev/10
-    (or (eql m rev)
-        (eql m (the word32 (truncate rev 10))))))
+  ;; even length: m == rev; odd length: m == rev/10
+  (or (eql m rev)
+      (eql m (the word32 (truncate rev 10))))))
 
 ;; ------------------------------------------------------------------
 ;; Allocation-tight builders for the flat factor-pair vector (unboxed)

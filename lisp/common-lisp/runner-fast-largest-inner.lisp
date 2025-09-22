@@ -5,6 +5,7 @@
 
 (load "../gc.lisp")
 (load "args.lisp")
+(load "utility.lisp")
 
 (declaim (ftype (function (pp-fast::word32 pp-fast::word32 pp-fast::word32)
                           (values pp-fast::word32 (unsigned-byte 64)))
@@ -25,7 +26,9 @@
                      (type (simple-array (unsigned-byte 32) (*)) vec)
                      (type pp-fast::word32 p))
             (setf sum (the pp-fast::word64 (pp-fast::sum-ub32-vector vec)))
-            (incf acc (+ sum (the pp-fast::word64 p) cnt))
+            (setf acc (the pp-fast::word64 (+ acc sum)))
+            (setf acc (the pp-fast::word64 (+ acc (the pp-fast::word64 p))))
+            (setf acc (the pp-fast::word64 (+ acc cnt)))
             (incf cnt))))
       (setf current-max (if (<= current-max min)
                             max
@@ -33,24 +36,6 @@
     (multiple-value-bind (p _vec) (pp-fast:largest-inner min max)
       (declare (ignore _vec))
       (values (or p 0) acc))))
-
-(defmacro with-fast-command-parse ((line cmd a b) &body body)
-  (let ((s (gensym "S")) (len (gensym "LEN"))
-        (sp1 (gensym "SP1")) (sp2 (gensym "SP2"))
-        (sp3 (gensym "SP3")) (end-a (gensym "END-A")))
-    `(let* ((,s ,line)
-            (,len (length ,s)))
-       (declare (type simple-string ,s)
-                (type fixnum ,len)
-                (optimize (speed 3) (safety 0) (debug 0)))
-       (let* ((,sp1 (position #\Space ,s :start 0 :end ,len))
-              (,sp2 (and ,sp1 (position #\Space ,s :start (1+ ,sp1) :end ,len)))
-              (,sp3 (and ,sp2 (position #\Space ,s :start (1+ ,sp2) :end ,len)))
-              (,cmd (if ,sp1 (subseq ,s 0 ,sp1) ,s))
-              (,end-a (or ,sp2 ,len))
-              (,a (and ,sp1 (parse-integer ,s :start (1+ ,sp1) :end ,end-a)))
-              (,b (and ,sp2 (parse-integer ,s :start (1+ ,sp2) :end (or ,sp3 ,len)))))
-         ,@body))))
 
 (defun server-loop ()
   (pp-gc:prepare-gc-for-bench)
