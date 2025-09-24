@@ -82,23 +82,23 @@ fn has_even_digits(n: u32) -> bool {
     // Use bit manipulation to count digits efficiently
     // This avoids floating point and reduces the number of comparisons
     if n < 100 {
-        true  // 2 digits
+        true // 2 digits
     } else if n < 1_000 {
         false // 3 digits
     } else if n < 10_000 {
-        true  // 4 digits
+        true // 4 digits
     } else if n < 100_000 {
         false // 5 digits
     } else if n < 1_000_000 {
-        true  // 6 digits
+        true // 6 digits
     } else if n < 10_000_000 {
         false // 7 digits
     } else if n < 100_000_000 {
-        true  // 8 digits
+        true // 8 digits
     } else if n < 1_000_000_000 {
         false // 9 digits
     } else {
-        true  // 10 digits (max for u32)
+        true // 10 digits (max for u32)
     }
 }
 
@@ -141,7 +141,6 @@ pub fn is_pal(n: u32) -> bool {
 // Factor pair collection
 //
 
-
 /// Collect ordered factor pairs `(x, y)` (with `x <= y`) such that
 /// `x * y == product` and both factors lie in `[min..max]`.
 ///
@@ -178,7 +177,7 @@ pub fn collect_factor_pairs(product: u32, min: u32, max: u32) -> ArrayVec<u32, 4
 ///
 /// Returns `Some((product, pairs))` or `None` if either the range is invalid or
 /// no palindrome exists.
-/// 
+///
 /// The factor pairs are returned as a flat array [x0, y0, x1, y1, ...].
 ///
 /// Algorithm:
@@ -190,7 +189,6 @@ pub fn collect_factor_pairs(product: u32, min: u32, max: u32) -> ArrayVec<u32, 4
 ///   the row minimum; update `best` and continue.
 #[inline]
 pub fn smallest(min: u32, max: u32) -> Option<(u32, ArrayVec<u32, 4>)> {
-
     let mut best: u32 = u32::MAX;
 
     for x in min..=max {
@@ -225,7 +223,7 @@ pub fn smallest(min: u32, max: u32) -> Option<(u32, ArrayVec<u32, 4>)> {
 ///
 /// Returns `Some((product, pairs))` or `None` if either the range is invalid or
 /// no palindrome exists.
-/// 
+///
 /// The factor pairs are returned as a flat array [x0, y0, x1, y1, ...].
 ///
 /// Algorithm:
@@ -238,7 +236,6 @@ pub fn smallest(min: u32, max: u32) -> Option<(u32, ArrayVec<u32, 4>)> {
 ///   is the row maximum; update `best` and continue.
 #[inline]
 pub fn largest(min: u32, max: u32) -> Option<(u32, ArrayVec<u32, 4>)> {
-
     let mut best: u32 = 0;
 
     // x descends
@@ -302,30 +299,31 @@ where
 
     loop {
         buf.clear();
-        if reader.read_until(b'\n', &mut buf).unwrap_or(0) == 0 {
-            break;
-        }
-        // Trim trailing \n and optional \r
-        if let Some(&b'\n') = buf.last() { buf.pop(); }
-        if let Some(&b'\r') = buf.last() { buf.pop(); }
-
-        // Skip leading spaces
-        let mut i = 0usize;
-        while i < buf.len() && buf[i] == b' ' { i += 1; }
-        if i >= buf.len() { continue; }
+        reader
+            .read_until(b'\n', &mut buf)
+            .expect("This command parser very narrowly expects correct input");
 
         // Read command token [start..i)
+        let mut i = 0usize;
         let start = i;
-        while i < buf.len() && buf[i] != b' ' { i += 1; }
+        while i < buf.len() && buf[i] != b' ' {
+            i += 1;
+        }
         let cmd = &buf[start..i];
-        while i < buf.len() && buf[i] == b' ' { i += 1; }
+        while i < buf.len() && buf[i] == b' ' {
+            i += 1;
+        }
 
         // Helper: next field slice
         let mut next_field = || {
             let s = i;
-            while i < buf.len() && buf[i] != b' ' { i += 1; }
+            while i < buf.len() && buf[i] != b' ' {
+                i += 1;
+            }
             let field = &buf[s..i];
-            while i < buf.len() && buf[i] == b' ' { i += 1; }
+            while i < buf.len() && buf[i] == b' ' {
+                i += 1;
+            }
             field
         };
 
@@ -340,7 +338,9 @@ where
         } else if cmd == b"WARMUP" {
             let it_bytes = next_field();
             let iters = parse_u64(it_bytes);
-            if have_range { let _ = do_iters(min, max, iters); }
+            if have_range {
+                let _ = do_iters(min, max, iters);
+            }
             writer.write_all(b"OK\n").unwrap();
             writer.flush().unwrap();
         } else if cmd == b"RUN" {
@@ -351,11 +351,14 @@ where
                 let prod = prod_opt.unwrap_or(0);
                 let mut out = [0u8; 64];
                 let mut p = 0usize;
-                out[p..p+3].copy_from_slice(b"OK "); p += 3;
+                out[p..p + 3].copy_from_slice(b"OK ");
+                p += 3;
                 p += append_u32(&mut out[p..], prod);
-                out[p] = b' '; p += 1;
+                out[p] = b' ';
+                p += 1;
                 p += append_u64(&mut out[p..], acc);
-                out[p] = b'\n'; p += 1;
+                out[p] = b'\n';
+                p += 1;
                 writer.write_all(&out[..p]).unwrap();
             } else {
                 writer.write_all(b"ERR NOTINIT\n").unwrap();
@@ -372,36 +375,58 @@ where
 #[inline]
 fn parse_u32(bytes: &[u8]) -> u32 {
     let mut v: u32 = 0;
-    for &c in bytes { v = v.wrapping_mul(10).wrapping_add((c - b'0') as u32); }
+    for &c in bytes {
+        v = v.wrapping_mul(10).wrapping_add((c - b'0') as u32);
+    }
     v
 }
 
 #[inline]
 fn parse_u64(bytes: &[u8]) -> u64 {
     let mut v: u64 = 0;
-    for &c in bytes { v = v.wrapping_mul(10).wrapping_add((c - b'0') as u64); }
+    for &c in bytes {
+        v = v.wrapping_mul(10).wrapping_add((c - b'0') as u64);
+    }
     v
 }
 
 // Append decimal without allocation; returns bytes written
 #[inline]
 fn append_u32(dst: &mut [u8], mut v: u32) -> usize {
-    if v == 0 { dst[0] = b'0'; return 1; }
+    if v == 0 {
+        dst[0] = b'0';
+        return 1;
+    }
     let mut tmp = [0u8; 10];
     let mut i = 0;
-    while v > 0 { tmp[i] = b'0' + (v % 10) as u8; v /= 10; i += 1; }
+    while v > 0 {
+        tmp[i] = b'0' + (v % 10) as u8;
+        v /= 10;
+        i += 1;
+    }
     // reverse into dst
-    for j in 0..i { dst[j] = tmp[i - 1 - j]; }
+    for j in 0..i {
+        dst[j] = tmp[i - 1 - j];
+    }
     i
 }
 
 #[inline]
 fn append_u64(dst: &mut [u8], mut v: u64) -> usize {
-    if v == 0 { dst[0] = b'0'; return 1; }
+    if v == 0 {
+        dst[0] = b'0';
+        return 1;
+    }
     let mut tmp = [0u8; 20];
     let mut i = 0;
-    while v > 0 { tmp[i] = b'0' + (v % 10) as u8; v /= 10; i += 1; }
-    for j in 0..i { dst[j] = tmp[i - 1 - j]; }
+    while v > 0 {
+        tmp[i] = b'0' + (v % 10) as u8;
+        v /= 10;
+        i += 1;
+    }
+    for j in 0..i {
+        dst[j] = tmp[i - 1 - j];
+    }
     i
 }
 
@@ -422,7 +447,7 @@ mod tests {
     ) {
         let (p, f) = got.expect("expected Some(..), got None");
         assert_eq!(p, expect_p, "product mismatch");
-        
+
         // Convert flat array to pairs for comparison
         let mut pairs = Vec::new();
         for i in (0..f.len()).step_by(2) {
