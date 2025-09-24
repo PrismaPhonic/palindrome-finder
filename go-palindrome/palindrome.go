@@ -4,7 +4,6 @@ package palindrome
 
 import (
 	"bufio"
-	"bytes"
 	"io"
 	"os"
 )
@@ -243,59 +242,44 @@ func RunServer(doIters func(uint32, uint32, uint32) (uint32, uint32)) {
 			line = line[:len(line)-1]
 		}
 
-		// Skip leading spaces
-		i := 0
-		for i < len(line) && line[i] == ' ' {
-			i++
-		}
-		if i >= len(line) {
+		if len(line) == 0 {
 			continue
 		}
 
-		// Extract command token (case-sensitive, expect upper-case from harness)
-		start := i
-		for i < len(line) && line[i] != ' ' {
-			i++
-		}
-		cmd := line[start:i]
-
-		// Advance past spaces to first arg (if any)
-		for i < len(line) && line[i] == ' ' {
-			i++
-		}
-
-		// Helper to read next field slice [i:j]
-		nextField := func() []byte {
-			j := i
-			for j < len(line) && line[j] != ' ' {
-				j++
+		// Minimal command dispatch by first byte; fixed offsets to first integer
+		nextFieldAt := func(i *int) []byte {
+			s := *i
+			for *i < len(line) && line[*i] != ' ' {
+				*i++
 			}
-			field := line[i:j]
-			i = j
-			for i < len(line) && line[i] == ' ' {
-				i++
+			field := line[s:*i]
+			if *i < len(line) && line[*i] == ' ' {
+				*i++
 			}
 			return field
 		}
 
-		switch {
-		case bytes.Equal(cmd, []byte("INIT")):
-			aBytes := nextField()
-			bBytes := nextField()
+		switch line[0] {
+		case 'I': // INIT <min> <max>
+			i := 5 // after "INIT "
+			aBytes := nextFieldAt(&i)
+			bBytes := nextFieldAt(&i)
 			min = parseUint32(aBytes)
 			max = parseUint32(bBytes)
 			writer.WriteString("OK\n")
 			writer.Flush()
 
-		case bytes.Equal(cmd, []byte("WARMUP")):
-			itBytes := nextField()
+		case 'W': // WARMUP <iters>
+			i := 7 // after "WARMUP "
+			itBytes := nextFieldAt(&i)
 			iters := parseUint32(itBytes)
 			_, _ = doIters(min, max, iters)
 			writer.WriteString("OK\n")
 			writer.Flush()
 
-		case bytes.Equal(cmd, []byte("RUN")):
-			itBytes := nextField()
+		case 'R': // RUN <iters>
+			i := 4 // after "RUN "
+			itBytes := nextFieldAt(&i)
 			iters := parseUint32(itBytes)
 			prod, acc := doIters(min, max, iters)
 			// Write: OK <prod> <acc>\n without fmt
@@ -309,11 +293,9 @@ func RunServer(doIters func(uint32, uint32, uint32) (uint32, uint32)) {
 			writer.Write(out)
 			writer.Flush()
 
-		case bytes.Equal(cmd, []byte("QUIT")):
+		case 'Q': // QUIT
 			return
 
-		default:
-			// Assume proper use; ignore unknown commands
 		}
 	}
 }

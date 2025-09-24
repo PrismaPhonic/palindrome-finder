@@ -287,87 +287,73 @@ pub fn run_server<F>(mut do_iters: F)
 where
     F: FnMut(u32, u32, u64) -> (Option<u32>, u64),
 {
+    #[inline(always)]
+    fn next_field<'a>(buf: &'a [u8], i: &mut usize) -> &'a [u8] {
+        let s = *i;
+        while *i < buf.len() && buf[*i] != b' ' && buf[*i] != b'\n' {
+            *i += 1;
+        }
+        let field = &buf[s..*i];
+        if *i < buf.len() && buf[*i] == b' ' { *i += 1; }
+        field
+    }
+
     let stdin = std::io::stdin();
     let stdout = std::io::stdout();
     let mut reader = BufReader::new(stdin.lock());
     let mut writer = std::io::BufWriter::new(stdout.lock());
 
     let mut buf: Vec<u8> = Vec::with_capacity(256);
-    let mut have_range = false;
     let mut min: u32 = 0;
     let mut max: u32 = 0;
 
     loop {
         buf.clear();
-        reader
+        if reader
             .read_until(b'\n', &mut buf)
-            .expect("This command parser very narrowly expects correct input");
-
-        // Read command token [start..i)
-        let mut i = 0usize;
-        let start = i;
-        while i < buf.len() && buf[i] != b' ' {
-            i += 1;
-        }
-        let cmd = &buf[start..i];
-        while i < buf.len() && buf[i] == b' ' {
-            i += 1;
-        }
-
-        // Helper: next field slice
-        let mut next_field = || {
-            let s = i;
-            while i < buf.len() && buf[i] != b' ' {
-                i += 1;
+            .expect("This command parser very narrowly expects correct input") == 0 {
+                // EOF
+                break;
             }
-            let field = &buf[s..i];
-            while i < buf.len() && buf[i] == b' ' {
-                i += 1;
-            }
-            field
-        };
 
-        if cmd == b"INIT" {
-            let a_bytes = next_field();
-            let b_bytes = next_field();
+        // Command dispatch by first byte; jump directly to first integer
+        let cmd0 = buf[0];
+
+        if cmd0 == b'I' { // INIT <min> <max>
+            let mut i = 5; // after "INIT "
+            let a_bytes = next_field(&buf, &mut i);
+            let b_bytes = next_field(&buf, &mut i);
             min = parse_u32(a_bytes);
             max = parse_u32(b_bytes);
-            have_range = true;
             writer.write_all(b"OK\n").unwrap();
             writer.flush().unwrap();
-        } else if cmd == b"WARMUP" {
-            let it_bytes = next_field();
+        } else if cmd0 == b'W' { // WARMUP <iters>
+            let mut i = 7; // after "WARMUP "
+            let it_bytes = next_field(&buf, &mut i);
             let iters = parse_u64(it_bytes);
-            if have_range {
-                let _ = do_iters(min, max, iters);
-            }
+            let _ = do_iters(min, max, iters);
             writer.write_all(b"OK\n").unwrap();
             writer.flush().unwrap();
-        } else if cmd == b"RUN" {
-            let it_bytes = next_field();
+        } else if cmd0 == b'R' { // RUN <iters>
+            let mut i = 4; // after "RUN "
+            let it_bytes = next_field(&buf, &mut i);
             let iters = parse_u64(it_bytes);
-            if have_range {
-                let (prod_opt, acc) = do_iters(min, max, iters);
-                let prod = prod_opt.unwrap_or(0);
-                let mut out = [0u8; 64];
-                let mut p = 0usize;
-                out[p..p + 3].copy_from_slice(b"OK ");
-                p += 3;
-                p += append_u32(&mut out[p..], prod);
-                out[p] = b' ';
-                p += 1;
-                p += append_u64(&mut out[p..], acc);
-                out[p] = b'\n';
-                p += 1;
-                writer.write_all(&out[..p]).unwrap();
-            } else {
-                writer.write_all(b"ERR NOTINIT\n").unwrap();
-            }
+            let (prod_opt, acc) = do_iters(min, max, iters);
+            let prod = prod_opt.unwrap_or(0);
+            let mut out = [0u8; 64];
+            let mut p = 0usize;
+            out[p..p + 3].copy_from_slice(b"OK ");
+            p += 3;
+            p += append_u32(&mut out[p..], prod);
+            out[p] = b' ';
+            p += 1;
+            p += append_u64(&mut out[p..], acc);
+            out[p] = b'\n';
+            p += 1;
+            writer.write_all(&out[..p]).unwrap();
             writer.flush().unwrap();
-        } else if cmd == b"QUIT" {
+        } else if cmd0 == b'Q' { // QUIT
             break;
-        } else {
-            // Assume proper use; ignore unknown commands
         }
     }
 }

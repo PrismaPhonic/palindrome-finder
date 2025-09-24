@@ -188,56 +188,37 @@ largest minVal maxVal = case searchLargest minVal maxVal of
 -- | Server protocol implementation
 runServer :: (Word32 -> Word32 -> Word32 -> (Word32, Word32)) -> IO ()
 runServer doIters = do
-  let loop mVal xVal = do
+  let loop !minV !maxV = do
         line <- C8.hGetLine stdin
-        let (cmd, rest1) = C8.break (== ' ') line
-            rest1' = C8.dropWhile (== ' ') rest1
-        if cmd == "INIT"
-          then do
-            let (aBS, rest2) = C8.break (== ' ') rest1'
-                rest2' = C8.dropWhile (== ' ') rest2
-                (bBS, _) = C8.break (== ' ') rest2'
-                a = parseW32 aBS
-                b = parseW32 bBS
+        case C8.head line of
+          'I' -> do
+            -- INIT <min> <max> (single spaces)
+            let rest   = C8.drop 5 line
+                (aBS, rest2) = C8.break (== ' ') rest
+                bBS    = C8.drop 1 rest2
+                a      = parseW32 aBS
+                b      = parseW32 bBS
             C8.hPutStrLn stdout "OK"
             hFlush stdout
-            loop (Just a) (Just b)
-          else if cmd == "WARMUP"
-          then do
-            let itBS = rest1'
-                iters = parseW32 itBS
-            case (mVal, xVal) of
-              (Just a, Just b) -> do
-                let (p, c) = doIters a b iters
-                p `seq` c `seq` C8.hPutStrLn stdout "OK"
-                hFlush stdout
-                loop mVal xVal
-              _ -> do
-                C8.hPutStrLn stdout "ERR NOTINIT"
-                hFlush stdout
-                loop mVal xVal
-          else if cmd == "RUN"
-          then do
-            let itBS = rest1'
-                iters = parseW32 itBS
-            case (mVal, xVal) of
-              (Just a, Just b) -> do
-                let (prod, cnt) = doIters a b iters
-                    bld = BB.byteString "OK " <> BB.word32Dec prod <> BB.char8 ' ' <> BB.word32Dec cnt <> BB.char8 '\n'
-                LBS.hPut stdout (BB.toLazyByteString bld)
-                hFlush stdout
-                loop mVal xVal
-              _ -> do
-                C8.hPutStrLn stdout "ERR NOTINIT"
-                hFlush stdout
-                loop mVal xVal
-          else if cmd == "QUIT"
-          then return ()
-          else do
-            C8.hPutStrLn stdout "ERR BADCMD"
+            loop a b
+          'W' -> do
+            -- WARMUP <iters>
+            let iters = parseW32 (C8.drop 7 line)
+                !_ = doIters minV maxV iters
+            C8.hPutStrLn stdout "OK"
             hFlush stdout
-            loop mVal xVal
-  loop Nothing Nothing
+            loop minV maxV
+          'R' -> do
+            -- RUN <iters>
+            let iters = parseW32 (C8.drop 4 line)
+                (prod, cnt) = doIters minV maxV iters
+                bld = BB.byteString "OK " <> BB.word32Dec prod <> BB.char8 ' ' <> BB.word32Dec cnt <> BB.char8 '\n'
+            LBS.hPut stdout (BB.toLazyByteString bld)
+            hFlush stdout
+            loop minV maxV
+          'Q' -> return ()
+          _   -> loop minV maxV
+  loop 0 0
 
 -- Parse unsigned decimal Word32 from ASCII bytes
 {-# INLINE parseW32 #-}

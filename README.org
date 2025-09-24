@@ -253,6 +253,32 @@ RUSTFLAGS="-C target-cpu=native" cargo bench
 Criterion will run the configured scenarios and report timing distributions and
 comparisons.
 
+** Runner command protocol and strict input assumptions
+
+All runners implement the same minimal line protocol and assume strictly correct input. This design removes parsing overhead (allocations, generic math, error branches) to ensure the benchmark measures only the palindrome algorithms.
+
+- Protocol (one command per line):
+  - =INIT <min> <max>=: set factor range (must be called before WARMUP/RUN)
+  - =WARMUP <iters>=: run iterations without reporting product/accumulator
+  - =RUN <iters>=: run iterations and print =OK <product> <acc>=
+  - =QUIT=: exit
+
+- Parsing assumptions shared by Common Lisp, Coalton, Rust, Go, and Haskell:
+  - Commands are uppercase ASCII and start at column 0
+  - Single ASCII space between tokens; no leading/trailing spaces
+  - Unsigned decimal integers that fit in 32-bit for =min=, =max=, =iters=
+  - Lines are terminated by a single newline (no carriage return required)
+  - Unknown commands are ignored or treated as no-ops; no usage/help output
+  - No defensive checks (e.g., input validation, =min<=max= checks) in runners
+
+- Implementation notes:
+  - First-character dispatch: =I=/=W=/=R=/=Q= selects the handler without token slicing
+  - Fixed offsets to the first integer (e.g., after ="INIT "=) avoid extra scans
+  - Integer parsing is zero-allocation and branch-light in all languages
+  - Output is written directly to buffered stdout without formatting libraries
+
+- Rationale: The benchmark harness (Criterion) fully controls inputs. By removing defensive parsing and dynamic dispatch, we avoid measurement skew from I/O and parsing overhead and keep the hot path consistently comparable across languages.
+
 * Current results
 
 Latest average times per iteration (sorted from largest to smallest, then fastest to slowest):
