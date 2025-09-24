@@ -49,6 +49,9 @@ main = do
       let (prod, _) = doIters min' max' iters'
       print prod
     _ -> do
-      putStrLn "Usage: palprod-haskell-largest <min> <max> <iters> | palprod-haskell-largest --server"
-      putStrLn "  --server: Run in server mode for benchmarking"
-      putStrLn "  <min> <max> <iters>: Run once with given parameters"
+      -- Assume correct input: three positional args
+      let min' = read (args !! 0) :: Word32
+          max' = read (args !! 1) :: Word32
+          iters' = read (args !! 2) :: Word32
+      let (prod, _) = doIters min' max' iters'
+      print prod

@@ -1,20 +1,12 @@
 use palprod_rust::run_server;
 use palprod_rust::functional::do_iters_smallest_functional;
 use std::env;
-use std::process::exit;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.iter().any(|a| a == "--server") {
         run_server(do_iters_smallest_functional);
         return;
-    }
-    if args.len() != 4 {
-        eprintln!(
-            "usage: {} <min> <max> <iters>  |  {} --server",
-            args[0], args[0]
-        );
-        exit(2);
     }
     let min: u32 = args[1].parse().unwrap();
     let max: u32 = args[2].parse().unwrap();

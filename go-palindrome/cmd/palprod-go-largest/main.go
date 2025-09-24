@@ -78,17 +78,10 @@ func main() {
 		palindrome.RunServer(doIters)
 		return
 	}
-	if len(args) != 4 {
-		fmt.Fprintf(os.Stderr, "usage: %s <min> <max> <iters>  |  %s --server\n", args[0], args[0])
-		os.Exit(2)
-	}
-	min64, err1 := strconv.ParseUint(args[1], 10, 32)
-	max64, err2 := strconv.ParseUint(args[2], 10, 32)
-	iters64, err3 := strconv.ParseUint(args[3], 10, 32)
-	if err1 != nil || err2 != nil || err3 != nil {
-		fmt.Fprintf(os.Stderr, "error parsing arguments\n")
-		os.Exit(2)
-	}
+	// Assume correct input: three positional args
+	min64, _ := strconv.ParseUint(args[1], 10, 32)
+	max64, _ := strconv.ParseUint(args[2], 10, 32)
+	iters64, _ := strconv.ParseUint(args[3], 10, 32)
 	min := uint32(min64)
 	max := uint32(max64)
 	iters := uint32(iters64)

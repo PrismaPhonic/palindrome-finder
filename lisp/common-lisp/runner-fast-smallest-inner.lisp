@@ -63,7 +63,10 @@
   (let* ((argv #+sbcl sb-ext:*posix-argv*))
     (if (and argv (find "--server" argv :test #'string=))
         (server-loop)
-        (multiple-value-bind (min max iters) (pp-args:parse-min-max-iters)
+        (let* ((len (length argv))
+               (min (the (unsigned-byte 32) (parse-integer (svref argv (- len 3)))))
+               (max (the (unsigned-byte 32) (parse-integer (svref argv (- len 2)))))
+               (iters (the (unsigned-byte 32) (max 1 (parse-integer (svref argv (- len 1)))))))
           (pp-gc:prepare-gc-for-bench)
           (format t "~D~%" (%do-iters min max iters))))))
 

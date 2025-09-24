@@ -1,6 +1,5 @@
 use palprod_rust::{run_server, smallest};
 use std::env;
-use std::process::exit;
 
 fn do_iters(min: u32, max: u32, iters: u64) -> (Option<u32>, u64) {
     let mut acc: u64 = 0;
@@ -29,13 +28,6 @@ fn main() {
     if args.iter().any(|a| a == "--server") {
         run_server(do_iters);
         return;
-    }
-    if args.len() != 4 {
-        eprintln!(
-            "usage: {} <min> <max> <iters>  |  {} --server",
-            args[0], args[0]
-        );
-        exit(2);
     }
     let min: u32 = args[1].parse().unwrap();
     let max: u32 = args[2].parse().unwrap();
