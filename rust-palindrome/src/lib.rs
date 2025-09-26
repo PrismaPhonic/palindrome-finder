@@ -59,6 +59,7 @@
 //! compare the designs side-by-side.
 
 use std::io::{BufRead, BufReader, Write};
+use std::num::NonZeroU32;
 
 use arrayvec::ArrayVec;
 
@@ -118,11 +119,12 @@ pub fn is_pal(n: u32) -> bool {
         return true;
     }
     // Non-zero numbers ending in 0 cannot be palindromes.
-    if n % 10 == 0 {
+    if n.is_multiple_of(10) {
         return false;
     }
+
     // Even-length palindromes must be divisible by 11.
-    if has_even_digits(n) && n % 11 != 0 {
+    if has_even_digits(n) && !n.is_multiple_of(11) {
         return false;
     }
 
@@ -190,17 +192,16 @@ pub fn collect_factor_pairs(product: u32, min: u32, max: u32) -> ArrayVec<u32, 4
 #[inline]
 pub fn smallest(min: u32, max: u32) -> Option<(u32, ArrayVec<u32, 4>)> {
     let mut best: u32 = u32::MAX;
+    let start = min.max(1);
 
-    for x in min..=max {
+    for x in start..=max {
         if x * x >= best {
             break; // outer prune
         }
 
+        let x_nz = unsafe { NonZeroU32::new_unchecked(x) };
         // Row cap: only products < best matter.
-        let y_upper = ((best - 1) / x).min(max);
-        if y_upper < x {
-            continue; // no valid y in this row
-        }
+        let y_upper = ((best - 1) / x_nz).min(max);
 
         for y in x..=y_upper {
             // No prod >= best check needed; y_upper already enforces it.
@@ -237,20 +238,16 @@ pub fn smallest(min: u32, max: u32) -> Option<(u32, ArrayVec<u32, 4>)> {
 #[inline]
 pub fn largest(min: u32, max: u32) -> Option<(u32, ArrayVec<u32, 4>)> {
     let mut best: u32 = 0;
+    let start = min.max(1);
 
     // x descends
-    for x in (min..=max).rev() {
-        // Outer prune: once x*max <= best, smaller x cannot improve.
+    for x in (start..=max).rev() {
         if x * max <= best {
             break;
         }
 
-        // y lower bound: only products > best matter; also enforce y >= x.
-        let y_lower = ((best / x) + 1).max(x);
-
-        if y_lower > max {
-            continue; // no work for this row
-        }
+        let x_nz = unsafe { NonZeroU32::new_unchecked(x) };
+        let y_lower = ((best / x_nz) + 1).max(x);
 
         for y in (y_lower..=max).rev() {
             let p = x * y; // guaranteed > best by bounds of y_lower
@@ -294,7 +291,9 @@ where
             *i += 1;
         }
         let field = &buf[s..*i];
-        if *i < buf.len() && buf[*i] == b' ' { *i += 1; }
+        if *i < buf.len() && buf[*i] == b' ' {
+            *i += 1;
+        }
         field
     }
 
@@ -311,15 +310,18 @@ where
         buf.clear();
         if reader
             .read_until(b'\n', &mut buf)
-            .expect("This command parser very narrowly expects correct input") == 0 {
-                // EOF
-                break;
-            }
+            .expect("This command parser very narrowly expects correct input")
+            == 0
+        {
+            // EOF
+            break;
+        }
 
         // Command dispatch by first byte; jump directly to first integer
         let cmd0 = buf[0];
 
-        if cmd0 == b'I' { // INIT <min> <max>
+        if cmd0 == b'I' {
+            // INIT <min> <max>
             let mut i = 5; // after "INIT "
             let a_bytes = next_field(&buf, &mut i);
             let b_bytes = next_field(&buf, &mut i);
@@ -327,14 +329,16 @@ where
             max = parse_u32(b_bytes);
             writer.write_all(b"OK\n").unwrap();
             writer.flush().unwrap();
-        } else if cmd0 == b'W' { // WARMUP <iters>
+        } else if cmd0 == b'W' {
+            // WARMUP <iters>
             let mut i = 7; // after "WARMUP "
             let it_bytes = next_field(&buf, &mut i);
             let iters = parse_u64(it_bytes);
             let _ = do_iters(min, max, iters);
             writer.write_all(b"OK\n").unwrap();
             writer.flush().unwrap();
-        } else if cmd0 == b'R' { // RUN <iters>
+        } else if cmd0 == b'R' {
+            // RUN <iters>
             let mut i = 4; // after "RUN "
             let it_bytes = next_field(&buf, &mut i);
             let iters = parse_u64(it_bytes);
@@ -352,7 +356,8 @@ where
             p += 1;
             writer.write_all(&out[..p]).unwrap();
             writer.flush().unwrap();
-        } else if cmd0 == b'Q' { // QUIT
+        } else if cmd0 == b'Q' {
+            // QUIT
             break;
         }
     }

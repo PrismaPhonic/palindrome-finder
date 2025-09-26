@@ -14,11 +14,12 @@ pub fn is_pal_functional(n: u32) -> bool {
         return true;
     }
     // Non-zero numbers ending in 0 cannot be palindromes
-    if n % 10 == 0 {
+    // Non-zero numbers ending in 0 cannot be palindromes.
+    if n.is_multiple_of(10) {
         return false;
     }
     // Even-length palindromes must be divisible by 11
-    if has_even_digits(n) && n % 11 != 0 {
+    if has_even_digits(n) && !n.is_multiple_of(11) {
         return false;
     }
 
