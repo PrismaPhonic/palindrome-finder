@@ -95,7 +95,7 @@ fn collect_pairs_recursive(
         return;
     }
 
-    if product % x == 0 {
+    if product.is_multiple_of(x) {
         let y = product / x;
         result.push(x);
         result.push(y);
@@ -105,25 +105,16 @@ fn collect_pairs_recursive(
 }
 
 #[inline(always)]
-pub fn smallest_functional(min: u32, max: u32) -> Option<(u32, ArrayVec<u32, 4>)> {
+pub fn smallest_product_functional(min: u32, max: u32) -> Option<u32> {
     // Start row search at x = min with sentinel best
     search_smallest(min, u32::MAX, min, max)
 }
 
 #[inline(always)]
-fn search_smallest(
-    x: u32,
-    best: u32,
-    min_bound: u32,
-    max_bound: u32,
-) -> Option<(u32, ArrayVec<u32, 4>)> {
+fn search_smallest(x: u32, best: u32, min_bound: u32, max_bound: u32) -> Option<u32> {
     // Mirrors Haskell's searchRowsForSmallest with x ascending and pruning
     if x > max_bound || x * x >= best {
-        if best == u32::MAX {
-            None
-        } else {
-            Some((best, collect_factor_pairs(best, min_bound, max_bound)))
-        }
+        if best == u32::MAX { None } else { Some(best) }
     } else {
         match search_row_smallest(x, best, max_bound) {
             None => search_smallest(x + 1, best, min_bound, max_bound),
@@ -163,25 +154,33 @@ fn search_column_smallest(x: u32, y: u32, y_upper: u32, current_best: u32) -> Op
 /// Functional largest palindrome search using tail recursion
 /// Pure functional implementation with explicit tail calls
 #[inline(always)]
-pub fn largest_functional(min: u32, max: u32) -> Option<(u32, ArrayVec<u32, 4>)> {
+pub fn largest_product_functional(min: u32, max: u32) -> Option<u32> {
     // Start with x = max, keep max as fixed upper bound
     search_largest(max, min, max, 0)
 }
 
 #[inline(always)]
-fn search_largest(x: u32, min: u32, max: u32, best: u32) -> Option<(u32, ArrayVec<u32, 4>)> {
+fn search_largest(x: u32, min: u32, max: u32, best: u32) -> Option<u32> {
     if x < min || x * max <= best {
-        if best == 0 {
-            None
-        } else {
-            Some((best, collect_factor_pairs(best, min, max)))
-        }
+        if best == 0 { None } else { Some(best) }
     } else {
         match search_row_for_largest(x, best, max) {
             None => search_largest(x - 1, min, max, best),
             Some(new_best) => search_largest(x - 1, min, max, new_best),
         }
     }
+}
+
+#[inline(always)]
+pub fn smallest_functional(min: u32, max: u32) -> Option<(u32, ArrayVec<u32, 4>)> {
+    smallest_product_functional(min, max)
+        .map(|product| (product, collect_factor_pairs(product, min, max)))
+}
+
+#[inline(always)]
+pub fn largest_functional(min: u32, max: u32) -> Option<(u32, ArrayVec<u32, 4>)> {
+    largest_product_functional(min, max)
+        .map(|product| (product, collect_factor_pairs(product, min, max)))
 }
 
 #[inline(always)]
@@ -263,7 +262,6 @@ pub fn do_iters_smallest_functional(min: u32, max: u32, iters: u64) -> (Option<u
     let base_prod = smallest_functional(min, max).map(|(p, _)| p);
     (base_prod, acc.0)
 }
-
 
 #[cfg(test)]
 mod tests {

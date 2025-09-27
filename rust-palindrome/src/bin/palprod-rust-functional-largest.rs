@@ -1,5 +1,5 @@
-use palprod_rust::run_server;
 use palprod_rust::functional::do_iters_largest_functional;
+use palprod_rust::run_server;
 use std::env;
 
 fn main() {

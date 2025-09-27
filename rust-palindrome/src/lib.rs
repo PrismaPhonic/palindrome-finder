@@ -160,7 +160,7 @@ pub fn collect_factor_pairs(product: u32, min: u32, max: u32) -> ArrayVec<u32, 4
     // improves cache usage and reduces stack footprint for this benchmark scope.
     let mut out: ArrayVec<u32, 4> = ArrayVec::new_const();
     for x in low..=high {
-        if product % x == 0 {
+        if product.is_multiple_of(x) {
             // y is automatically >= x because x <= isqrt(product)
             let y = product / x;
             out.push(x);
@@ -190,34 +190,51 @@ pub fn collect_factor_pairs(product: u32, min: u32, max: u32) -> ArrayVec<u32, 4
 /// - Iterate `y` from `x` to `y_upper`; the first palindrome in that row is
 ///   the row minimum; update `best` and continue.
 #[inline]
-pub fn smallest(min: u32, max: u32) -> Option<(u32, ArrayVec<u32, 4>)> {
+pub fn smallest_product(min: u32, max: u32) -> Option<u32> {
     let mut best: u32 = u32::MAX;
     let start = min.max(1);
 
-    for x in start..=max {
+    if start > max {
+        return None;
+    }
+
+    let mut x = start;
+    while x <= max {
         if x * x >= best {
-            break; // outer prune
+            break;
         }
 
         let x_nz = unsafe { NonZeroU32::new_unchecked(x) };
-        // Row cap: only products < best matter.
         let y_upper = ((best - 1) / x_nz).min(max);
 
-        for y in x..=y_upper {
-            // No prod >= best check needed; y_upper already enforces it.
-            let prod = x * y; // guaranteed < best via y_upper.
-            if is_pal(prod) {
-                best = prod;
-                break; // row minimum found; move to next x
+        if y_upper >= x {
+            let mut y = x;
+            loop {
+                let prod = x * y;
+                if is_pal(prod) {
+                    best = prod;
+                    break;
+                }
+
+                if y == y_upper {
+                    break;
+                }
+                y += 1;
             }
         }
+
+        if x == max {
+            break;
+        }
+        x += 1;
     }
 
-    if best == u32::MAX {
-        None
-    } else {
-        Some((best, collect_factor_pairs(best, min, max)))
-    }
+    if best == u32::MAX { None } else { Some(best) }
+}
+
+#[inline]
+pub fn smallest(min: u32, max: u32) -> Option<(u32, ArrayVec<u32, 4>)> {
+    smallest_product(min, max).map(|product| (product, collect_factor_pairs(product, min, max)))
 }
 
 /// Find the largest palindromic product in `[min..max]` and its factor pairs.
@@ -236,12 +253,16 @@ pub fn smallest(min: u32, max: u32) -> Option<(u32, ArrayVec<u32, 4>)> {
 /// - Iterate `y` from `max` down to `y_lower`; the first palindrome in that row
 ///   is the row maximum; update `best` and continue.
 #[inline]
-pub fn largest(min: u32, max: u32) -> Option<(u32, ArrayVec<u32, 4>)> {
+pub fn largest_product(min: u32, max: u32) -> Option<u32> {
     let mut best: u32 = 0;
     let start = min.max(1);
 
-    // x descends
-    for x in (start..=max).rev() {
+    if start > max {
+        return None;
+    }
+
+    let mut x = max;
+    while x >= start {
         if x * max <= best {
             break;
         }
@@ -249,20 +270,34 @@ pub fn largest(min: u32, max: u32) -> Option<(u32, ArrayVec<u32, 4>)> {
         let x_nz = unsafe { NonZeroU32::new_unchecked(x) };
         let y_lower = ((best / x_nz) + 1).max(x);
 
-        for y in (y_lower..=max).rev() {
-            let p = x * y; // guaranteed > best by bounds of y_lower
-            if is_pal(p) {
-                best = p; // row maximum found
-                break; // move to next x
+        if y_lower <= max {
+            let mut y = max;
+            loop {
+                let p = x * y;
+                if is_pal(p) {
+                    best = p;
+                    break;
+                }
+
+                if y == y_lower {
+                    break;
+                }
+                y -= 1;
             }
         }
+
+        if x == start {
+            break;
+        }
+        x -= 1;
     }
 
-    if best > 0 {
-        Some((best, collect_factor_pairs(best, min, max)))
-    } else {
-        None
-    }
+    if best > 0 { Some(best) } else { None }
+}
+
+#[inline]
+pub fn largest(min: u32, max: u32) -> Option<(u32, ArrayVec<u32, 4>)> {
+    largest_product(min, max).map(|product| (product, collect_factor_pairs(product, min, max)))
 }
 
 //
