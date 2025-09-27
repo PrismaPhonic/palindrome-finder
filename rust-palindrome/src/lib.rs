@@ -159,13 +159,19 @@ pub fn collect_factor_pairs(product: u32, min: u32, max: u32) -> ArrayVec<u32, 4
     // the factor-pair list never exceeds 4 slots (2 pairs). Using capacity=4
     // improves cache usage and reduces stack footprint for this benchmark scope.
     let mut out: ArrayVec<u32, 4> = ArrayVec::new_const();
-    for x in low..=high {
+    let mut x = low;
+    while x <= high {
         if product.is_multiple_of(x) {
             // y is automatically >= x because x <= isqrt(product)
             let y = product / x;
-            out.push(x);
-            out.push(y);
+            out.push_unchecked(x);
+            out.push_unchecked(y);
         }
+
+        if x == high {
+            break;
+        }
+        x += 1;
     }
 
     out

@@ -97,8 +97,8 @@ fn collect_pairs_recursive(
 
     if product.is_multiple_of(x) {
         let y = product / x;
-        result.push(x);
-        result.push(y);
+        result.push_unchecked(x);
+        result.push_unchecked(y);
     }
 
     become collect_pairs_recursive(product, min, max, x + 1, high, result);
