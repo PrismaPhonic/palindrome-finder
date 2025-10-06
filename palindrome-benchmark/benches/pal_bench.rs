@@ -1,12 +1,19 @@
 use criterion::{Criterion, criterion_group, criterion_main};
 use std::io::{BufRead, Write};
 use std::process::{Command, Stdio};
-use std::time::{Duration, Instant};
+use std::time::Duration;
+
+const TARGET_CYCLE_MULTIPLIER: u64 = 20_000;
+const FIXED_THRESHOLD_MULTIPLIER: u64 = 1_000;
 
 struct Runner {
     child: std::process::Child,
     stdin: std::io::BufWriter<std::process::ChildStdin>,
     stdout: std::io::BufReader<std::process::ChildStdout>,
+    cycle_len: u64,
+    fixed_iters: u64,
+    fixed_threshold: u64,
+    force_fixed: bool,
 }
 
 impl Runner {
@@ -23,6 +30,10 @@ impl Runner {
             child,
             stdin,
             stdout,
+            cycle_len: 0,
+            fixed_iters: 0,
+            fixed_threshold: 0,
+            force_fixed: false,
         }
     }
     fn send(&mut self, line: &str) {
@@ -37,17 +48,61 @@ impl Runner {
     fn init(&mut self, min: i32, max: i32) {
         self.send(&format!("INIT {min} {max}"));
         assert!(self.read_line().starts_with("OK"));
+        let min = min as i64;
+        let max = max as i64;
+        assert!(max >= min, "invalid range");
+        let cycle_len = (max - min + 1) as u64;
+        assert!(cycle_len > 0);
+        self.cycle_len = cycle_len;
+        self.fixed_iters = cycle_len * TARGET_CYCLE_MULTIPLIER;
+        self.fixed_threshold = cycle_len * FIXED_THRESHOLD_MULTIPLIER;
+        self.force_fixed = false;
     }
     fn warmup(&mut self, iters: u64) {
-        self.send(&format!("WARMUP {iters}"));
+        let actual = self.round_up_to_cycle(iters.max(1));
+        self.send(&format!("WARMUP {actual}"));
         assert!(self.read_line().starts_with("OK"));
     }
-    fn run(&mut self, iters: u64) -> i64 {
-        self.send(&format!("RUN {iters}"));
+    fn run(&mut self, requested_iters: u64) -> (i64, u64) {
+        let (actual_iters, scaled_iters) = self.adjust_iters(requested_iters.max(1));
+        self.send(&format!("RUN {actual_iters}"));
         let line = self.read_line();
         let parts: Vec<_> = line.split_whitespace().collect();
-        assert!(parts.len() >= 2 && parts[0] == "OK");
-        parts[1].parse::<i64>().unwrap()
+        assert!(parts.len() >= 4 && parts[0] == "OK");
+        let product = parts[1].parse::<i64>().unwrap();
+        let nanos = parts[3].parse::<u64>().unwrap();
+        let scaled = if actual_iters == scaled_iters {
+            nanos
+        } else {
+            let numerator = (nanos as u128) * (scaled_iters as u128);
+            let denominator = actual_iters as u128;
+            ((numerator + denominator / 2) / denominator) as u64
+        };
+        (product, scaled)
+    }
+    fn round_up_to_cycle(&self, value: u64) -> u64 {
+        let cycle_len = self.cycle_len;
+        assert!(cycle_len > 0, "init must be called before run");
+        let value = value.max(cycle_len);
+        let rem = value % cycle_len;
+        if rem == 0 {
+            value
+        } else {
+            value + (cycle_len - rem)
+        }
+    }
+    fn adjust_iters(&mut self, requested: u64) -> (u64, u64) {
+        let cycle_len = self.cycle_len;
+        assert!(cycle_len > 0, "init must be called before run");
+        if !self.force_fixed && requested >= self.fixed_threshold {
+            self.force_fixed = true;
+        }
+        let actual = if self.force_fixed {
+            self.fixed_iters
+        } else {
+            self.round_up_to_cycle(requested)
+        };
+        (actual, requested)
     }
 }
 
@@ -68,9 +123,8 @@ fn bench_servered(c: &mut Criterion, name: &str, bin: &str, min: i32, max: i32) 
 
     c.bench_function(name, |b| {
         b.iter_custom(|iters| {
-            let start = Instant::now();
-            let _ = r.run(iters);
-            start.elapsed()
+            let (_, nanos) = r.run(iters);
+            Duration::from_nanos(nanos)
         })
     });
 }
@@ -95,31 +149,33 @@ pub fn benches(c: &mut Criterion) {
     let coalton_lg = "../target-bin/palprod-coalton-largest";
     let coalton_sm = "../target-bin/palprod-coalton-smallest";
 
-    bench_servered(c, "Coalton largest 2..999", coalton_lg, 2, 999);
-    bench_servered(c, "Coalton smallest 2..999", coalton_sm, 2, 999);
-
     bench_servered(c, "Common Lisp   largest 2..999", sbcl_lg, 2, 999);
     bench_servered(c, "Common Lisp   smallest 2..999", sbcl_sm, 2, 999);
+
+    bench_servered(c, "Haskell largest 2..999", haskell_lg, 2, 999);
+    bench_servered(c, "Haskell smallest 2..999", haskell_sm, 2, 999);
+
+    bench_servered(c, "Coalton largest 2..999", coalton_lg, 2, 999);
+    bench_servered(c, "Coalton smallest 2..999", coalton_sm, 2, 999);
 
     bench_servered(c, "RUST   largest 2..999", rust_lg, 2, 999);
     bench_servered(c, "RUST   smallest 2..999", rust_sm, 2, 999);
     // If present, also benchmark PGO/BOLT variants
-    if std::path::Path::new(rust_lg_bolt_opt).exists() { bench_servered(c, "RUST+BOLT largest 2..999", rust_lg_bolt_opt, 2, 999); }
-    if std::path::Path::new(rust_sm_bolt_opt).exists() { bench_servered(c, "RUST+BOLT smallest 2..999", rust_sm_bolt_opt, 2, 999); }
+    // if std::path::Path::new(rust_lg_bolt_opt).exists() { bench_servered(c, "RUST+BOLT largest 2..999", rust_lg_bolt_opt, 2, 999); }
+    // if std::path::Path::new(rust_sm_bolt_opt).exists() { bench_servered(c, "RUST+BOLT smallest 2..999", rust_sm_bolt_opt, 2, 999); }
 
     bench_servered(c, "RUST (functional)  largest 2..999", rust_fn_lg, 2, 999);
     bench_servered(c, "RUST (functional)  smallest 2..999", rust_fn_sm, 2, 999);
     // If present, also benchmark PGO/BOLT variants
-    if std::path::Path::new(rust_lg_bolt_opt).exists() { bench_servered(c, "RUST+BOLT (functional)  largest 2..999", rust_fn_lg_bolt_opt, 2, 999); }
-    if std::path::Path::new(rust_sm_bolt_opt).exists() { bench_servered(c, "RUST+BOLT (functional)  smallest 2..999", rust_fn_sm_bolt_opt, 2, 999); }
 
     bench_servered(c, "GO     largest 2..999", go_lg, 2, 999);
     bench_servered(c, "GO     smallest 2..999", go_sm, 2, 999);
-    if std::path::Path::new(go_lg_pgo).exists() { bench_servered(c, "GO+PGO largest 2..999", go_lg_pgo, 2, 999); }
-    if std::path::Path::new(go_sm_pgo).exists() { bench_servered(c, "GO+PGO smallest 2..999", go_sm_pgo, 2, 999); }
-
-    bench_servered(c, "Haskell largest 2..999", haskell_lg, 2, 999);
-    bench_servered(c, "Haskell smallest 2..999", haskell_sm, 2, 999);
+    if std::path::Path::new(go_lg_pgo).exists() {
+        bench_servered(c, "GO+PGO largest 2..999", go_lg_pgo, 2, 999);
+    }
+    if std::path::Path::new(go_sm_pgo).exists() {
+        bench_servered(c, "GO+PGO smallest 2..999", go_sm_pgo, 2, 999);
+    }
 }
 
 criterion_group! {

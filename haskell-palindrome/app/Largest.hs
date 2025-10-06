@@ -5,17 +5,17 @@ module Main where
 import qualified Palindrome as P
 import Palindrome (largest, runServer, Result(..), sumUArray)
 import System.Environment (getArgs)
-import Data.Word (Word32)
+import Data.Word (Word32, Word64)
 import Data.Maybe (maybe)
 import Data.Array.Unboxed (elems)
 import qualified Data.Foldable as F
 
 -- | Server implementation for largest palindrome
-doIters :: Word32 -> Word32 -> Word32 -> (Word32, Word32)
+doIters :: Word32 -> Word32 -> Word32 -> (Word32, Word64)
 
 doIters minVal maxVal iters = 
   let -- Single loop: iterate currentMax from max..min cycling, for exactly `iters` steps
-      iterateLargest :: Word32 -> Word32 -> Word32 -> Word32 -> (Word32, Word32)
+      iterateLargest :: Word32 -> Word32 -> Word64 -> Word64 -> (Word64, Word64)
       iterateLargest !n !currentMax !acc !cnt
         | n >= iters = (acc, cnt)
         | otherwise =
@@ -25,7 +25,7 @@ doIters minVal maxVal iters =
                                   Just r  ->
                                     let prod = P.product r
                                         sPairs = sumUArray (P.pairs r)
-                                        !a' = acc + prod + sPairs + cnt
+                                        !a' = acc + fromIntegral prod + fromIntegral sPairs + cnt
                                     in (a', cnt + 1)
                 nextMax = if currentMax <= minVal then maxVal else currentMax - 1
             in iterateLargest (n + 1) nextMax acc' cnt'

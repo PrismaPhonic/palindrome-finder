@@ -285,24 +285,24 @@ Latest average times per iteration (sorted from largest to smallest, then fastes
 
 | Implementation               |  Range | Task     | Time      |
 |------------------------------+--------+----------+-----------|
-| Haskell                      | 2..999 | largest  | 1.5703 µs |
-| Rust                         | 2..999 | largest  | 1.6506 µs |
-| Rust Functional              | 2..999 | largest  | 1.7033 µs |
+| Haskell                      | 2..999 | largest  | 1.4395 µs |
 | Rust Functional (PGO + Bolt) | 2..999 | largest  | 1.7248 µs |
+| Rust                         | 2..999 | largest  | 1.7585 µs |
+| Rust Functional              | 2..999 | largest  | 1.7608 µs |
 | Rust (PGO + Bolt)            | 2..999 | largest  | 1.7716 µs |
-| Common Lisp                  | 2..999 | largest  | 2.1313 µs |
-| Golang                       | 2..999 | largest  | 2.2154 µs |
+| Common Lisp                  | 2..999 | largest  | 2.1744 µs |
+| Golang                       | 2..999 | largest  | 2.2108 µs |
 | Golang (PGO)                 | 2..999 | largest  | 2.2430 µs |
-| Coalton                      | 2..999 | largest  | 2.4868 µs |
+| Coalton                      | 2..999 | largest  | 2.5532 µs |
 | Rust Functional (PGO + Bolt) | 2..999 | smallest | 1.9471 µs |
 | Rust (PGO + Bolt)            | 2..999 | smallest | 1.9569 µs |
-| Haskell                      | 2..999 | smallest | 2.0275 µs |
-| Rust Functional              | 2..999 | smallest | 2.1557 µs |
-| Rust                         | 2..999 | smallest | 2.5117 µs |
-| Common Lisp                  | 2..999 | smallest | 2.9560 µs |
-| Golang                       | 2..999 | smallest | 3.0891 µs |
+| Haskell                      | 2..999 | smallest | 2.0159 µs |
+| Rust Functional              | 2..999 | smallest | 2.2743 µs |
+| Rust                         | 2..999 | smallest | 2.3764 µs |
+| Common Lisp                  | 2..999 | smallest | 3.0380 µs |
+| Golang                       | 2..999 | smallest | 3.1216 µs |
 | Golang (PGO)                 | 2..999 | smallest | 3.2679 µs |
-| Coalton                      | 2..999 | smallest | 3.4939 µs |
+| Coalton                      | 2..999 | smallest | 3.5974 µs |
 |                              |        |          |           |
 * Rust functional implementation
 

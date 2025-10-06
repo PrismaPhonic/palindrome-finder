@@ -97,8 +97,8 @@ fn collect_pairs_recursive(
 
     if product.is_multiple_of(x) {
         let y = product / x;
-        result.push_unchecked(x);
-        result.push_unchecked(y);
+        result.push(x);
+        result.push(y);
     }
 
     become collect_pairs_recursive(product, min, max, x + 1, high, result);
@@ -209,58 +209,6 @@ fn search_column_largest(x: u32, y: u32, y_lower: u32, current_best: u32) -> Opt
             become search_column_largest(x, y - 1, y_lower, current_best)
         }
     }
-}
-
-#[inline(always)]
-pub fn do_iters_largest_functional(min: u32, max: u32, iters: u64) -> (Option<u32>, u64) {
-    // Create an iterator that cycles through the range
-    let acc = (0..iters)
-        .scan(max, |current_max, _| {
-            let result = *current_max;
-            *current_max = if *current_max <= min {
-                max
-            } else {
-                *current_max - 1
-            };
-            Some(result)
-        })
-        .map(|current_max| {
-            largest_functional(min, current_max)
-                .map(|(prod, pairs)| (prod, pairs.into_iter().map(|v| v as u64).sum::<u64>()))
-        })
-        .fold((0u64, 0u64), |(acc, cnt), result| match result {
-            Some((prod, pairs_sum)) => (acc + (prod as u64) + pairs_sum + cnt, cnt + 1),
-            None => (acc, cnt + 1),
-        });
-
-    let base_prod = largest_functional(min, max).map(|(p, _)| p);
-    (base_prod, acc.0)
-}
-
-#[inline(always)]
-pub fn do_iters_smallest_functional(min: u32, max: u32, iters: u64) -> (Option<u32>, u64) {
-    // Create an iterator that cycles through the range
-    let acc = (0..iters)
-        .scan(min, |current_min, _| {
-            let result = *current_min;
-            *current_min = if *current_min >= max {
-                min
-            } else {
-                *current_min + 1
-            };
-            Some(result)
-        })
-        .map(|current_min| {
-            smallest_functional(current_min, max)
-                .map(|(prod, pairs)| (prod, pairs.into_iter().map(|v| v as u64).sum::<u64>()))
-        })
-        .fold((0u64, 0u64), |(acc, cnt), result| match result {
-            Some((prod, pairs_sum)) => (acc + (prod as u64) + pairs_sum + cnt, cnt + 1),
-            None => (acc, cnt + 1),
-        });
-
-    let base_prod = smallest_functional(min, max).map(|(p, _)| p);
-    (base_prod, acc.0)
 }
 
 #[cfg(test)]

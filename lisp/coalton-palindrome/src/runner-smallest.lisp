@@ -9,6 +9,8 @@
 (load "../gc.lisp")
 (load "../utility.lisp")
 
+(use-package :pp-util)
+
 (declaim (ftype (function ((unsigned-byte 32) (unsigned-byte 32) (unsigned-byte 32))
                           (values (unsigned-byte 32) (unsigned-byte 32)))
                 %do-iters))
@@ -18,6 +20,14 @@
   (let ((result (coalton-palindrome:do-iters-smallest min max iters)))
     (values (the (unsigned-byte 32) (coalton-library/tuple:fst result))
             (the (unsigned-byte 32) (coalton-library/tuple:snd result)))))
+
+(defun run-with-timing (min max iters)
+  (declare (type (unsigned-byte 32) min max iters))
+  (let ((start (pp-util:read-monotonic-ns)))
+    (multiple-value-bind (prod acc) (%do-iters min max iters)
+      (let* ((end (pp-util:read-monotonic-ns))
+             (elapsed (pp-util:time-diff-ns start end)))
+        (values prod acc elapsed)))))
 
 (defun %parse-u32 (s)
   (the (unsigned-byte 32) (parse-integer s)))
@@ -37,8 +47,9 @@
                    (%do-iters min max a)
                    (format t "OK~%") (finish-output))
                   ((char= c #\R)
-                   (multiple-value-bind (p acc) (%do-iters min max a)
-                     (format t "OK ~D ~D~%" p acc))
+                   (multiple-value-bind (prod acc elapsed)
+                       (run-with-timing min max a)
+                     (format t "OK ~D ~D ~D~%" prod acc elapsed))
                    (finish-output))
                   ((char= c #\Q) (return))))))))
 

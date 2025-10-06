@@ -216,7 +216,7 @@ func Largest(min, max uint32) *struct {
 //
 // The doIters function must do the full work (including
 // factor pair building) and return the final product as (uint32, uint32).
-func RunServer(doIters func(uint32, uint32, uint32) (uint32, uint32)) {
+func RunServer(doIters func(uint32, uint32, uint32) (uint32, uint64, uint64)) {
 	reader := bufio.NewReader(os.Stdin)
 	writer := bufio.NewWriter(os.Stdout)
 	defer writer.Flush()
@@ -273,7 +273,7 @@ func RunServer(doIters func(uint32, uint32, uint32) (uint32, uint32)) {
 			i := 7 // after "WARMUP "
 			itBytes := nextFieldAt(&i)
 			iters := parseUint32(itBytes)
-			_, _ = doIters(min, max, iters)
+			_, _, _ = doIters(min, max, iters)
 			writer.WriteString("OK\n")
 			writer.Flush()
 
@@ -281,14 +281,16 @@ func RunServer(doIters func(uint32, uint32, uint32) (uint32, uint32)) {
 			i := 4 // after "RUN "
 			itBytes := nextFieldAt(&i)
 			iters := parseUint32(itBytes)
-			prod, acc := doIters(min, max, iters)
-			// Write: OK <prod> <acc>\n without fmt
-			var buf [64]byte
+			prod, acc, nanos := doIters(min, max, iters)
+			// Write: OK <prod> <acc> <nanos>\n without fmt
+			var buf [96]byte
 			out := buf[:0]
 			out = append(out, 'O', 'K', ' ')
 			out = appendUint32(out, prod)
 			out = append(out, ' ')
-			out = appendUint32(out, acc)
+			out = appendUint64(out, acc)
+			out = append(out, ' ')
+			out = appendUint64(out, nanos)
 			out = append(out, '\n')
 			writer.Write(out)
 			writer.Flush()
@@ -316,6 +318,20 @@ func appendUint32(dst []byte, v uint32) []byte {
 		return append(dst, '0')
 	}
 	var buf [10]byte
+	i := len(buf)
+	for v > 0 {
+		i--
+		buf[i] = byte('0' + v%10)
+		v /= 10
+	}
+	return append(dst, buf[i:]...)
+}
+
+func appendUint64(dst []byte, v uint64) []byte {
+	if v == 0 {
+		return append(dst, '0')
+	}
+	var buf [20]byte
 	i := len(buf)
 	for v > 0 {
 		i--

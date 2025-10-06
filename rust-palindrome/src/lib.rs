@@ -60,6 +60,7 @@
 
 use std::io::{BufRead, BufReader, Write};
 use std::num::NonZeroU32;
+use std::time::Instant;
 
 use arrayvec::ArrayVec;
 
@@ -164,18 +165,51 @@ pub fn collect_factor_pairs(product: u32, min: u32, max: u32) -> ArrayVec<u32, 4
         if product.is_multiple_of(x) {
             // y is automatically >= x because x <= isqrt(product)
             let y = product / x;
-            out.push_unchecked(x);
-            out.push_unchecked(y);
+            out.push(x);
+            out.push(y);
         }
 
         if x == high {
             break;
         }
+
         x += 1;
     }
 
     out
 }
+
+#[inline]
+pub fn collect_factor_pairs_range(product: u32, min: u32, max: u32) -> ArrayVec<u32, 4> {
+    // Tight window: x in [ceil(product/max) .. min(max, isqrt(product))]
+    let low = product.div_ceil(max).max(min);
+    let high = product.isqrt().min(max);
+
+    // Verified for bounds [1, 999] inclusive (both smallest and largest):
+    // the factor-pair list never exceeds 4 slots (2 pairs). Using capacity=4
+    // improves cache usage and reduces stack footprint for this benchmark scope.
+    let mut out: ArrayVec<u32, 4> = ArrayVec::new_const();
+    for x in low..=high {
+        if product.is_multiple_of(x) {
+            // y is automatically >= x because x <= isqrt(product)
+            let y = product / x;
+            out.push(x);
+            out.push(y);
+        }
+    }
+
+    out
+}
+
+//
+// Smallest / largest searches with pruning
+//
+
+/// Find the smallest palindromic product in `[min..max]` and its factor pairs.
+///
+/// Returns `Some((product, pairs))` or `None` if either the range is invalid or
+/// no palindrome exists.
+///
 
 //
 // Smallest / largest searches with pruning
@@ -323,7 +357,7 @@ pub fn largest(min: u32, max: u32) -> Option<(u32, ArrayVec<u32, 4>)> {
 /// factor pair building) and return the final product as `Option<u64>`.
 pub fn run_server<F>(mut do_iters: F)
 where
-    F: FnMut(u32, u32, u64) -> (Option<u32>, u64),
+    F: FnMut(u32, u32, u64) -> (Option<u32>, u64, u64),
 {
     #[inline(always)]
     fn next_field<'a>(buf: &'a [u8], i: &mut usize) -> &'a [u8] {
@@ -383,9 +417,9 @@ where
             let mut i = 4; // after "RUN "
             let it_bytes = next_field(&buf, &mut i);
             let iters = parse_u64(it_bytes);
-            let (prod_opt, acc) = do_iters(min, max, iters);
+            let (prod_opt, acc, nanos) = do_iters(min, max, iters);
             let prod = prod_opt.unwrap_or(0);
-            let mut out = [0u8; 64];
+            let mut out = [0u8; 96];
             let mut p = 0usize;
             out[p..p + 3].copy_from_slice(b"OK ");
             p += 3;
@@ -393,6 +427,9 @@ where
             out[p] = b' ';
             p += 1;
             p += append_u64(&mut out[p..], acc);
+            out[p] = b' ';
+            p += 1;
+            p += append_u64(&mut out[p..], nanos);
             out[p] = b'\n';
             p += 1;
             writer.write_all(&out[..p]).unwrap();
@@ -402,6 +439,70 @@ where
             break;
         }
     }
+}
+
+#[inline(always)]
+fn accumulate_result(acc: &mut u64, counter: &mut u64, result: Option<(u32, ArrayVec<u32, 4>)>) {
+    if let Some((prod, pairs)) = result {
+        *acc += prod as u64 + *counter + pairs.into_iter().map(|value| value as u64).sum::<u64>();
+        *counter += 1;
+    }
+}
+
+#[inline(always)]
+pub fn run_iters_desc<F>(min: u32, max: u32, iters: u64, finder: F) -> (Option<u32>, u64, u64)
+where
+    F: Fn(u32, u32) -> Option<(u32, ArrayVec<u32, 4>)>,
+{
+    let base_prod = finder(min, max).map(|(product, _)| product);
+
+    let mut acc: u64 = 0;
+    let mut counter: u64 = 0;
+    let mut current = max;
+    let start = Instant::now();
+
+    for _ in 0..iters {
+        accumulate_result(&mut acc, &mut counter, finder(min, current));
+
+        current = if current <= min { max } else { current - 1 };
+    }
+
+    let nanos = start.elapsed().as_nanos();
+    let elapsed_ns = if nanos > u64::MAX as u128 {
+        u64::MAX
+    } else {
+        nanos as u64
+    };
+
+    (base_prod, acc, elapsed_ns)
+}
+
+#[inline(always)]
+pub fn run_iters_asc<F>(min: u32, max: u32, iters: u64, finder: F) -> (Option<u32>, u64, u64)
+where
+    F: Fn(u32, u32) -> Option<(u32, ArrayVec<u32, 4>)>,
+{
+    let base_prod = finder(min, max).map(|(product, _)| product);
+
+    let mut acc: u64 = 0;
+    let mut counter: u64 = 0;
+    let mut current = min;
+    let start = Instant::now();
+
+    for _ in 0..iters {
+        accumulate_result(&mut acc, &mut counter, finder(current, max));
+
+        current = if current >= max { min } else { current + 1 };
+    }
+
+    let nanos = start.elapsed().as_nanos();
+    let elapsed_ns = if nanos > u64::MAX as u128 {
+        u64::MAX
+    } else {
+        nanos as u64
+    };
+
+    (base_prod, acc, elapsed_ns)
 }
 
 #[inline]

@@ -18,7 +18,7 @@ import Data.Array.Unboxed (UArray, listArray, (!), bounds)
 import Data.Array.ST (STUArray, newArray, readArray, writeArray, freeze)
 import Control.Monad.ST (ST, runST)
 import Control.Monad (forM_)
-import Data.Word (Word32, Word8)
+import Data.Word (Word32, Word8, Word64)
 import Data.Maybe (Maybe(..))
 import Data.List (sort)
 import System.IO (hFlush, stdout, stdin)
@@ -27,6 +27,7 @@ import qualified Data.ByteString.Char8 as C8
 import qualified Data.ByteString.Builder as BB
 import qualified Data.ByteString.Lazy as LBS
 import GHC.Word (Word32(..))
+import GHC.Clock (getMonotonicTimeNSec)
 
 
 -- | Result type matching Rust's Option<(u32, ArrayVec<u32, 4>)>
@@ -186,7 +187,7 @@ largest minVal maxVal = case searchLargest minVal maxVal of
                        else searchColumnForLargest max' 0
 
 -- | Server protocol implementation
-runServer :: (Word32 -> Word32 -> Word32 -> (Word32, Word32)) -> IO ()
+runServer :: (Word32 -> Word32 -> Word32 -> (Word32, Word64)) -> IO ()
 runServer doIters = do
   let loop !minV !maxV = do
         line <- C8.hGetLine stdin
@@ -211,8 +212,18 @@ runServer doIters = do
           'R' -> do
             -- RUN <iters>
             let iters = parseW32 (C8.drop 4 line)
-                (prod, cnt) = doIters minV maxV iters
-                bld = BB.byteString "OK " <> BB.word32Dec prod <> BB.char8 ' ' <> BB.word32Dec cnt <> BB.char8 '\n'
+            start <- getMonotonicTimeNSec
+            let (!prod, !cnt) = doIters minV maxV iters
+            end <- getMonotonicTimeNSec
+            let nanos :: Word64
+                nanos = end - start
+                bld = BB.byteString "OK "
+                      <> BB.word32Dec prod
+                      <> BB.char8 ' '
+                      <> BB.word64Dec cnt
+                      <> BB.char8 ' '
+                      <> BB.word64Dec nanos
+                      <> BB.char8 '\n'
             LBS.hPut stdout (BB.toLazyByteString bld)
             hFlush stdout
             loop minV maxV

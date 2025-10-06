@@ -7,6 +7,9 @@
 (load "args.lisp")
 (load "../utility.lisp")
 
+(use-package :pp-util)
+
+#-sbcl
 (declaim (ftype (function (pp-fast::word32 pp-fast::word32 pp-fast::word32)
                           (values pp-fast::word32 (unsigned-byte 64)))
                 %do-iters))
@@ -37,6 +40,25 @@
       (declare (ignore _vec))
       (values (or p 0) acc))))
 
+(defun run-with-timing (min max iters)
+  (declare (type pp-fast::word32 min max iters))
+  #+sbcl
+  (let ((start (pp-util:read-monotonic-ns)))
+    (multiple-value-bind (product acc) (%do-iters min max iters)
+      (declare (type pp-fast::word32 product)
+               (type (unsigned-byte 64) acc))
+      (let ((elapsed (the (unsigned-byte 64)
+                          (pp-util:time-diff-ns start (pp-util:read-monotonic-ns)))))
+        (values product acc elapsed))))
+  #-sbcl
+  (let ((start (get-internal-real-time)))
+    (multiple-value-bind (product acc) (%do-iters min max iters)
+      (let* ((end (get-internal-real-time))
+             (elapsed-ns (truncate (* (- end start)
+                                      (/ 1000000000d0
+                                         internal-time-units-per-second)))))
+        (values product acc elapsed-ns)))))
+
 (defun server-loop ()
   (pp-gc:prepare-gc-for-bench)
   (let ((min nil) (max nil))
@@ -52,9 +74,9 @@
                    (%do-iters min max a)
                    (format t "OK~%") (finish-output))
                   ((char= c #\R)
-                   (multiple-value-bind (p acc) (%do-iters min max a)
-                     (format t "OK ~A ~A~%" p acc))
-                   (finish-output))
+                   (multiple-value-bind (p acc elapsed-ns) (run-with-timing min max a)
+                     (format t "OK ~A ~A ~D~%" p acc elapsed-ns)
+                     (finish-output)))
                   ((char= c #\Q) (return))))))))
 
 (defun main ()

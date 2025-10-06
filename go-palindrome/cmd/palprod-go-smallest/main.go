@@ -5,14 +5,16 @@ import (
 	"os"
 	"runtime/pprof"
 	"strconv"
+	"time"
 
 	"palindrome"
 )
 
-func doIters(min, max uint32, iters uint32) (uint32, uint32) {
-	var acc uint32 = 0
-	var counter uint32 = 0
+func doIters(min, max uint32, iters uint32) (uint32, uint64, uint64) {
+	var acc uint64 = 0
+	var counter uint64 = 0
 	currentMin := min
+	start := time.Now()
 
 	for n := uint32(0); n < iters; n++ {
 		if res := palindrome.Smallest(currentMin, max); res != nil {
@@ -22,7 +24,7 @@ func doIters(min, max uint32, iters uint32) (uint32, uint32) {
 			for k := 0; k+1 < len(fpairs); k += 2 {
 				sPairs += fpairs[k] + fpairs[k+1]
 			}
-			acc += prod + sPairs + counter
+			acc += uint64(prod) + uint64(sPairs) + counter
 			counter++
 		}
 		if currentMin >= max {
@@ -38,7 +40,8 @@ func doIters(min, max uint32, iters uint32) (uint32, uint32) {
 	if result != nil {
 		prod = result.Product
 	}
-	return prod, acc
+	elapsed := uint64(time.Since(start).Nanoseconds())
+	return prod, acc, elapsed
 }
 
 func main() {
@@ -88,6 +91,6 @@ func main() {
 	if iters == 0 {
 		iters = 1
 	}
-	prod, _ := doIters(min, max, iters)
+	prod, _, _ := doIters(min, max, iters)
 	fmt.Printf("%d\n", prod)
 }
