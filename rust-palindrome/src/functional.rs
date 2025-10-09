@@ -13,7 +13,6 @@ pub fn is_pal_functional(n: u32) -> bool {
     if n < 10 {
         return true;
     }
-    // Non-zero numbers ending in 0 cannot be palindromes
     // Non-zero numbers ending in 0 cannot be palindromes.
     if n.is_multiple_of(10) {
         return false;

@@ -210,17 +210,7 @@ pub fn collect_factor_pairs_range(product: u32, min: u32, max: u32) -> ArrayVec<
 /// Returns `Some((product, pairs))` or `None` if either the range is invalid or
 /// no palindrome exists.
 ///
-
-//
-// Smallest / largest searches with pruning
-//
-
-/// Find the smallest palindromic product in `[min..max]` and its factor pairs.
-///
-/// Returns `Some((product, pairs))` or `None` if either the range is invalid or
-/// no palindrome exists.
-///
-/// The factor pairs are returned as a flat array [x0, y0, x1, y1, ...].
+/// The factor pairs are returned as a flat array `[x0, y0, x1, y1, ...]`.
 ///
 /// Algorithm:
 /// - `x` ascends from `min` to `max`.
@@ -269,7 +259,11 @@ pub fn smallest_product(min: u32, max: u32) -> Option<u32> {
         x += 1;
     }
 
-    if best == u32::MAX { None } else { Some(best) }
+    if best == u32::MAX {
+        None
+    } else {
+        Some(best)
+    }
 }
 
 #[inline]
@@ -332,7 +326,11 @@ pub fn largest_product(min: u32, max: u32) -> Option<u32> {
         x -= 1;
     }
 
-    if best > 0 { Some(best) } else { None }
+    if best > 0 {
+        Some(best)
+    } else {
+        None
+    }
 }
 
 #[inline]
