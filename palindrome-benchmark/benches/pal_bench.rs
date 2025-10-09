@@ -14,10 +14,20 @@ struct Runner {
     fixed_iters: u64,
     fixed_threshold: u64,
     force_fixed: bool,
+    target_cycle_multiplier: u64,
+    fixed_threshold_multiplier: u64,
 }
 
 impl Runner {
     fn spawn(bin: &str) -> Self {
+        Self::spawn_with_multipliers(bin, TARGET_CYCLE_MULTIPLIER, FIXED_THRESHOLD_MULTIPLIER)
+    }
+
+    fn spawn_with_multipliers(
+        bin: &str,
+        target_cycle_multiplier: u64,
+        fixed_threshold_multiplier: u64,
+    ) -> Self {
         let mut child = Command::new(bin)
             .arg("--server")
             .stdin(Stdio::piped())
@@ -34,6 +44,8 @@ impl Runner {
             fixed_iters: 0,
             fixed_threshold: 0,
             force_fixed: false,
+            target_cycle_multiplier,
+            fixed_threshold_multiplier,
         }
     }
     fn send(&mut self, line: &str) {
@@ -54,8 +66,8 @@ impl Runner {
         let cycle_len = (max - min + 1) as u64;
         assert!(cycle_len > 0);
         self.cycle_len = cycle_len;
-        self.fixed_iters = cycle_len * TARGET_CYCLE_MULTIPLIER;
-        self.fixed_threshold = cycle_len * FIXED_THRESHOLD_MULTIPLIER;
+        self.fixed_iters = cycle_len * self.target_cycle_multiplier;
+        self.fixed_threshold = cycle_len * self.fixed_threshold_multiplier;
         self.force_fixed = false;
     }
     fn warmup(&mut self, iters: u64) {
@@ -117,6 +129,27 @@ impl Drop for Runner {
 fn bench_servered(c: &mut Criterion, name: &str, bin: &str, min: i32, max: i32) {
     let mut r = Runner::spawn(bin);
     r.init(min, max);
+    r.warmup(500_000);
+
+    c.bench_function(name, |b| {
+        b.iter_custom(|iters| {
+            let (_, nanos) = r.run(iters);
+            Duration::from_nanos(nanos)
+        })
+    });
+}
+
+fn bench_servered_with_multipliers(
+    c: &mut Criterion,
+    name: &str,
+    bin: &str,
+    min: i32,
+    max: i32,
+    target_cycle_multiplier: u64,
+    fixed_threshold_multiplier: u64,
+) {
+    let mut r = Runner::spawn_with_multipliers(bin, target_cycle_multiplier, fixed_threshold_multiplier);
+    r.init(min, max);
 
     // optional short pre-prime (page cache / JITs); not measured
     r.warmup(500_000);
@@ -140,6 +173,8 @@ pub fn benches(c: &mut Criterion) {
     let rust_fn_sm = "../target-bin/palprod-rust-functional-smallest";
     let rust_fn_lg_bolt_opt = "../target-bin/palprod-rust-functional-largest-bolt-optimized";
     let rust_fn_sm_bolt_opt = "../target-bin/palprod-rust-functional-smallest-bolt-optimized";
+    let rust_mem_lg = "../target-bin/palprod-rust-memoized-largest";
+    let rust_mem_sm = "../target-bin/palprod-rust-memoized-smallest";
     let go_lg = "../target-bin/palprod-go-largest";
     let go_sm = "../target-bin/palprod-go-smallest";
     let go_lg_pgo = "../target-bin/palprod-go-largest-pgo";
@@ -148,6 +183,32 @@ pub fn benches(c: &mut Criterion) {
     let haskell_sm = "../target-bin/palprod-haskell-smallest";
     let coalton_lg = "../target-bin/palprod-coalton-largest";
     let coalton_sm = "../target-bin/palprod-coalton-smallest";
+
+    // Memoized binaries finish each iteration so quickly that Criterion asks
+    // for billions of iterations per sample. To keep the wall-clock time
+    // reasonable we reuse the runner but dial the fixed-iteration guard way
+    // down; the runners still scale their reported nanoseconds so Criterion
+    // treats the sample as if the original request had been honored.
+    const MEM_TARGET_MULT: u64 = 1_000;
+    const MEM_THRESHOLD_MULT: u64 = 100;
+    bench_servered_with_multipliers(
+        c,
+        "RUST (memoized)   largest 2..999",
+        rust_mem_lg,
+        2,
+        999,
+        MEM_TARGET_MULT,
+        MEM_THRESHOLD_MULT,
+    );
+    bench_servered_with_multipliers(
+        c,
+        "RUST (memoized)   smallest 2..999",
+        rust_mem_sm,
+        2,
+        999,
+        MEM_TARGET_MULT,
+        MEM_THRESHOLD_MULT,
+    );
 
     bench_servered(c, "Common Lisp   largest 2..999", sbcl_lg, 2, 999);
     bench_servered(c, "Common Lisp   smallest 2..999", sbcl_sm, 2, 999);

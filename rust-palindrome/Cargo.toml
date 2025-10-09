@@ -15,6 +15,14 @@ path = "src/bin/palprod-rust-largest.rs"
 name = "palprod-rust-smallest"
 path = "src/bin/palprod-rust-smallest.rs"
 
+[[bin]]
+name = "palprod-rust-memoized-largest"
+path = "src/bin/palprod-rust-memoized-largest.rs"
+
+[[bin]]
+name = "palprod-rust-memoized-smallest"
+path = "src/bin/palprod-rust-memoized-smallest.rs"
+
 [profile.release]
 lto = "fat"  # Use fat LTO for better cross-module optimization
 codegen-units = 1

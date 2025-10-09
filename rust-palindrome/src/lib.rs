@@ -65,6 +65,7 @@ use std::time::Instant;
 use arrayvec::ArrayVec;
 
 pub mod functional;
+pub mod memoized;
 
 //
 // Palindrome helpers
