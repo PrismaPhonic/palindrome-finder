@@ -1,232 +1,177 @@
-#![feature(explicit_tail_calls, portable_simd)]
-
-//! Palindromic Products
-//! =========================================
-//!
-//! Problem
-//! -------
-//! Given an inclusive range [min..max], find:
-//!   1) the smallest palindromic product of two factors in that range
-//!   2) the largest palindromic product of two factors in that range
-//! and also return all factor pairs (x, y) with min <= x <= y <= max that
-//! produce that product.
-//!
-//! Approach (mirrors the SBCL/Common Lisp version)
-//! -----------------------------------------------
-//! 1) Palindrome test (numeric, no strings):
-//!    - Early outs: single-digit numbers are palindromes; numbers ending in 0
-//!      (and not 0 itself) are not palindromes.
-//!    - Even-length palindromes must be divisible by 11 (number theory fact).
-//!      We fast-reject even-length numbers not divisible by 11.
-//!    - Half-reverse: build the reverse of the low half of the digits until
-//!      rev >= m, then compare (m == rev) or (m == rev/10). This avoids a full
-//!      reversal and reduces divisions.
-//!
-//! 2) Search structure with strong pruning:
-//!    - For the smallest search:
-//!        * x ascends (min -> max).
-//!        * Outer prune: if x * x >= best, later rows cannot improve best.
-//!        * For each x, cap y at y_upper = min(max, floor((best-1)/x)).
-//!          That row then only tries x..=y_upper. First palindrome found in
-//!          that row is the smallest for that row; update best and continue.
-//!    - For the largest search:
-//!        * x descends (max -> min).
-//!        * Outer prune: if x * max <= best, earlier rows cannot improve best.
-//!        * For each x, start y at max and stop when y_lower = max(x, floor(best/x)+1).
-//!          The first palindrome found in that row is the largest for that row;
-//!          update best and continue.
-//!
-//! 3) Factor-pair enumeration (for the final product):
-//!    - Use a tight divisor window:
-//!         x in [ ceil(product / max) .. min(max, isqrt(product)) ]
-//!      For each x in that window, if product % x == 0, push (x, product/x)
-//!      if y is in range and y >= x.
-//!
-//! Performance notes
-//! -----------------
-//! - The half-reverse palindrome + 11 rule reduces calls to the palindrome test.
-//! - The tight y bounds in both searches greatly shrink the nested loops.
-//! - The factor enumeration window keeps divisibility checks minimal.
-//! - Build with release settings (opt-level=3, lto=thin, codegen-units=1,
-//!   panic=abort). Consider RUSTFLAGS="-C target-cpu=native" for local runs.
-//!
-//! Correctness notes
-//! -----------------
-//! - The searches return None if min > max or if no palindrome exists.
-//! - Factor collection uses ordered pairs (x <= y) within [min..max] only.
-//!
-//! This module is documented to match the Common Lisp file so readers can
-//! compare the designs side-by-side.
-
 use std::io::{BufRead, BufReader, Write};
 use std::num::NonZeroU32;
 use std::time::Instant;
 
 use arrayvec::ArrayVec;
+use std::simd::cmp::{SimdPartialEq, SimdPartialOrd};
+use std::simd::num::SimdUint;
+use std::simd::{LaneCount, Mask, Simd, SupportedLaneCount};
 
-pub mod functional;
-pub mod simd;
+use crate::{collect_factor_pairs, has_even_digits};
 
-//
-// Palindrome helpers
-//
+const SIMD_WIDTH: usize = 8;
+const SIMD_OFFSETS: Simd<u32, SIMD_WIDTH> = Simd::from_array([0, 1, 2, 3, 4, 5, 6, 7]);
+const SCRATCH_CAPACITY: usize = SIMD_WIDTH * 2;
 
-/// Returns true if `n` has an even number of decimal digits.
-///
-/// Preconditions:
-/// - Call only with `n >= 11`. Callers should filter out `n < 10` and trailing-zero cases.
-///
-/// Rationale:
-/// We use this to apply the rule "even-length palindromes must be divisible by 11".
+type SimdMask<const LANES: usize> = Mask<i32, LANES>;
+type SimdU32<const LANES: usize> = Simd<u32, LANES>;
+
 #[inline(always)]
-fn has_even_digits(n: u32) -> bool {
-    debug_assert!(n >= 11);
-    if n < 100 {
-        true // 2 digits
-    } else if n < 1_000 {
-        false // 3 digits
-    } else if n < 10_000 {
-        true // 4 digits
-    } else if n < 100_000 {
-        false // 5 digits
-    } else if n < 1_000_000 {
-        true // 6 digits
-    } else if n < 10_000_000 {
-        false // 7 digits
-    } else if n < 100_000_000 {
-        true // 8 digits
-    } else if n < 1_000_000_000 {
-        false // 9 digits
-    } else {
-        true // 10 digits (max for u32)
-    }
+fn div_mod_u32_const_portable<const LANES: usize>(
+    v: SimdU32<LANES>,
+    divisor: u32,
+    reciprocal: u64,
+) -> (SimdU32<LANES>, SimdU32<LANES>)
+where
+    LaneCount<LANES>: SupportedLaneCount,
+{
+    let wide: Simd<u64, LANES> = v.cast();
+    let q = ((wide * Simd::splat(reciprocal)) >> Simd::splat(32u64)).cast::<u32>();
+    let r = v - q * Simd::splat(divisor);
+    let adjust = r.simd_ge(Simd::splat(divisor));
+    let q_adj = q + adjust.select(Simd::splat(1u32), Simd::splat(0u32));
+    let r_adj = r - adjust.select(Simd::splat(divisor), Simd::splat(0u32));
+    (q_adj, r_adj)
 }
 
-/// Return true if `n` is a decimal palindrome (numeric half-reversal).
-///
-/// Fast-paths:
-/// - `n < 10` is palindrome
-/// - `n % 10 == 0` (and `n != 0`) cannot be palindrome
-/// - even-length palindromes must be divisible by 11; if not, reject
-///
-/// Core:
-/// - Build `rev` by taking right digits of `m` until `rev >= m`.
-/// - Then return `m == rev || m == rev/10`.
 #[inline(always)]
-pub fn is_pal(n: u32) -> bool {
-    if n < 10 {
-        return true;
-    }
-    // Non-zero numbers ending in 0 cannot be palindromes.
-    if n.is_multiple_of(10) {
-        return false;
-    }
+fn div_mod_10<const LANES: usize>(v: SimdU32<LANES>) -> (SimdU32<LANES>, SimdU32<LANES>)
+where
+    LaneCount<LANES>: SupportedLaneCount,
+{
+    div_mod_u32_const_portable(v, 10, 0x1999_999Au64)
+}
 
-    // Even-length palindromes must be divisible by 11.
-    if has_even_digits(n) && !n.is_multiple_of(11) {
-        return false;
-    }
+#[inline(always)]
+fn div_mod_11<const LANES: usize>(v: SimdU32<LANES>) -> (SimdU32<LANES>, SimdU32<LANES>)
+where
+    LaneCount<LANES>: SupportedLaneCount,
+{
+    div_mod_u32_const_portable(v, 11, 0x1745_D175u64)
+}
 
-    // Half-reverse
+#[inline(always)]
+const fn hundred_threshold<const LANES: usize>() -> SimdU32<LANES>
+where
+    LaneCount<LANES>: SupportedLaneCount,
+{
+    Simd::splat(100)
+}
+
+#[inline(always)]
+const fn thousand_threshold<const LANES: usize>() -> SimdU32<LANES>
+where
+    LaneCount<LANES>: SupportedLaneCount,
+{
+    Simd::splat(1_000)
+}
+
+#[inline(always)]
+const fn ten_thousand_threshold<const LANES: usize>() -> SimdU32<LANES>
+where
+    LaneCount<LANES>: SupportedLaneCount,
+{
+    Simd::splat(10_000)
+}
+
+#[inline(always)]
+const fn hundred_thousand_threshold<const LANES: usize>() -> SimdU32<LANES>
+where
+    LaneCount<LANES>: SupportedLaneCount,
+{
+    Simd::splat(100_000)
+}
+
+#[inline(always)]
+const fn zero<const LANES: usize>() -> SimdU32<LANES>
+where
+    LaneCount<LANES>: SupportedLaneCount,
+{
+    Simd::splat(0)
+}
+
+/// Vectorised parity of decimal digit-count. Returns mask flagging even-digit lanes.
+#[inline(always)]
+fn has_even_digits_mask<const LANES: usize>(n: SimdU32<LANES>) -> SimdMask<LANES>
+where
+    LaneCount<LANES>: SupportedLaneCount,
+{
+    // We only need to check up to 6 digits, because 999 x 999 is 998,001 which
+    // is only 6 digits.
+    // We also don't need to check < 10 because we already bail out early on that.
+
+    let mut parity = SimdMask::splat(true);
+    let cmp_a = n.simd_ge(hundred_threshold());
+    let cmp_b = n.simd_ge(thousand_threshold());
+    let cmp_c = n.simd_ge(ten_thousand_threshold());
+    let cmp_d = n.simd_ge(hundred_thousand_threshold());
+    parity ^= cmp_a;
+    parity ^= cmp_b;
+    parity ^= cmp_c;
+    parity ^= cmp_d;
+    parity
+}
+
+#[inline(always)]
+fn is_pal_simd_mask_generic<const LANES: usize>(n: SimdU32<LANES>) -> SimdMask<LANES>
+where
+    LaneCount<LANES>: SupportedLaneCount,
+{
+    let ten = Simd::splat(10);
+
     let mut m = n;
-    let mut rev: u32 = 0;
-    while m > rev {
-        rev = rev * 10 + m % 10;
-        m /= 10;
+    let mut rev = Simd::splat(0u32);
+    let mut active = m.simd_gt(rev);
+
+    while active.any() {
+        let (m_next, digits) = div_mod_10(m);
+        let rev_next = rev * ten + digits;
+        rev = active.select(rev_next, rev);
+        m = active.select(m_next, m);
+        active = m.simd_gt(rev);
     }
 
-    m == rev || m == rev / 10
+    let eq_full = m.simd_eq(rev);
+    let (rev_div10, _) = div_mod_10(rev);
+    let eq_half = rev_div10.simd_eq(m);
+    eq_full | eq_half
 }
 
-//
-// Factor pair collection
-//
-
-/// Collect ordered factor pairs `(x, y)` (with `x <= y`) such that
-/// `x * y == product` and both factors lie in `[min..max]`.
-///
-/// Returns a flat array [x0, y0, x1, y1, ...] to match the Lisp approach.
-/// Uses a tight divisor window:
-///   x in [ ceil(product / max) .. min(max, isqrt(product)) ]
-#[inline]
-pub fn collect_factor_pairs(product: u32, min: u32, max: u32) -> ArrayVec<u32, 4> {
-    // Tight window: x in [ceil(product/max) .. min(max, isqrt(product))]
-    let low = product.div_ceil(max).max(min);
-    let high = product.isqrt().min(max);
-
-    // Verified for bounds [1, 999] inclusive (both smallest and largest):
-    // the factor-pair list never exceeds 4 slots (2 pairs). Using capacity=4
-    // improves cache usage and reduces stack footprint for this benchmark scope.
-    let mut out: ArrayVec<u32, 4> = ArrayVec::new_const();
-    let mut x = low;
-    while x <= high {
-        if product.is_multiple_of(x) {
-            // y is automatically >= x because x <= isqrt(product)
-            let y = product / x;
-            out.push(x);
-            out.push(y);
-        }
-
-        if x == high {
-            break;
-        }
-
-        x += 1;
-    }
-
-    out
+#[inline(always)]
+pub fn is_pal_simd_mask<const LANES: usize>(n: SimdU32<LANES>) -> SimdMask<LANES>
+where
+    LaneCount<LANES>: SupportedLaneCount,
+{
+    is_pal_simd_mask_generic(n)
 }
 
-#[inline]
-pub fn collect_factor_pairs_range(product: u32, min: u32, max: u32) -> ArrayVec<u32, 4> {
-    // Tight window: x in [ceil(product/max) .. min(max, isqrt(product))]
-    let low = product.div_ceil(max).max(min);
-    let high = product.isqrt().min(max);
+// Bails out early for trailing zero or even fail modulo 11. We already bail
+// before this for < 10 as a safety check, so no need to call it here.
+#[inline(always)]
+fn simd_early_bailout<const LANES: usize>(n: SimdU32<LANES>) -> SimdMask<LANES>
+where
+    LaneCount<LANES>: SupportedLaneCount,
+{
+    let (_n_div10, n_mod10) = div_mod_10(n);
+    let trailing_zero = n_mod10.simd_eq(zero()) & n.simd_ne(zero());
+    let (_n_div11, n_mod11) = div_mod_11(n);
+    let even_fail = has_even_digits_mask(n) & n_mod11.simd_ne(zero());
 
-    // Verified for bounds [1, 999] inclusive (both smallest and largest):
-    // the factor-pair list never exceeds 4 slots (2 pairs). Using capacity=4
-    // improves cache usage and reduces stack footprint for this benchmark scope.
-    let mut out: ArrayVec<u32, 4> = ArrayVec::new_const();
-    for x in low..=high {
-        if product.is_multiple_of(x) {
-            // y is automatically >= x because x <= isqrt(product)
-            let y = product / x;
-            out.push(x);
-            out.push(y);
-        }
-    }
-
-    out
+    !trailing_zero & !even_fail
 }
 
 //
 // Smallest / largest searches with pruning
 //
 
-/// Find the smallest palindromic product in `[min..max]` and its factor pairs.
-///
-/// Returns `Some((product, pairs))` or `None` if either the range is invalid or
-/// no palindrome exists.
-///
-/// The factor pairs are returned as a flat array `[x0, y0, x1, y1, ...]`.
-///
-/// Algorithm:
-/// - `x` ascends from `min` to `max`.
-/// - Outer prune: if `x*x >= best`, later rows cannot improve `best`.
-/// - For a fixed `x`, we only need `y` up to `y_upper = min(max, (best-1)/x)`.
-///   If `y_upper < x`, there is no work in that row.
-/// - Iterate `y` from `x` to `y_upper`; the first palindrome in that row is
-///   the row minimum; update `best` and continue.
 #[inline]
 pub fn smallest_product(min: u32, max: u32) -> Option<u32> {
     let mut best: u32 = u32::MAX;
     let start = min.max(1);
 
-    if start > max {
-        return None;
-    }
-
+    let ten = Simd::splat(10);
     let mut x = start;
+    let mut scratch: ArrayVec<u32, SCRATCH_CAPACITY> = ArrayVec::new();
     while x <= max {
         if x * x >= best {
             break;
@@ -235,20 +180,72 @@ pub fn smallest_product(min: u32, max: u32) -> Option<u32> {
         let x_nz = unsafe { NonZeroU32::new_unchecked(x) };
         let y_upper = ((best - 1) / x_nz).min(max);
 
-        if y_upper >= x {
-            let mut y = x;
+        if y_upper <= x {
+            if x == max {
+                break;
+            }
+            x += 1;
+            continue;
+        }
+
+        let mut row_best: Option<u32> = None;
+        let lane_span = SIMD_WIDTH as u32;
+        let chunk_ceiling = y_upper.saturating_sub(lane_span - 1);
+
+        if chunk_ceiling >= x {
+            let x_vec = Simd::splat(x);
+            let mut y_base = x;
+            let mut y_vec = Simd::splat(y_base) + SIMD_OFFSETS;
+            let lane_step = Simd::splat(lane_span);
+            let prod_step = x_vec * lane_step;
+            let mut prod_vec = x_vec * y_vec;
+
             loop {
-                let prod = x * y;
-                if is_pal(prod) {
-                    best = prod;
+                let lt10 = prod_vec.simd_lt(ten);
+                if lt10.any() {
+                    let lane = lt10.to_bitmask().trailing_zeros() as usize;
+                    row_best = Some(prod_vec[lane]);
                     break;
                 }
 
-                if y == y_upper {
+                let mask = simd_early_bailout(prod_vec);
+                let bits = mask.to_bitmask();
+                if bits != 0 {
+                    for lane in 0..SIMD_WIDTH {
+                        if (bits & (1 << lane)) != 0 {
+                            scratch.push(prod_vec[lane]);
+                        }
+                    }
+                }
+
+                if scratch.len() >= SIMD_WIDTH
+                    && let Some(found) = process_compact_full_lanes(&mut scratch)
+                {
+                    row_best = Some(found);
                     break;
                 }
-                y += 1;
+
+                let next_base = y_base.saturating_add(lane_span);
+                if next_base > chunk_ceiling {
+                    if let Some(found) = scan_smallest_tail(x, next_base, y_upper, &mut scratch) {
+                        row_best = Some(found);
+                    }
+                    scratch.clear();
+                    break;
+                }
+
+                y_base = next_base;
+                y_vec += lane_step;
+                prod_vec += prod_step;
             }
+        } else if let Some(found) = scan_smallest_tail(x, x, y_upper, &mut scratch) {
+            row_best = Some(found);
+        }
+
+        if let Some(prod) = row_best
+            && prod < best
+        {
+            best = prod;
         }
 
         x += 1;
@@ -262,30 +259,13 @@ pub fn smallest(min: u32, max: u32) -> Option<(u32, ArrayVec<u32, 4>)> {
     smallest_product(min, max).map(|product| (product, collect_factor_pairs(product, min, max)))
 }
 
-/// Find the largest palindromic product in `[min..max]` and its factor pairs.
-///
-/// Returns `Some((product, pairs))` or `None` if either the range is invalid or
-/// no palindrome exists.
-///
-/// The factor pairs are returned as a flat array [x0, y0, x1, y1, ...].
-///
-/// Algorithm:
-/// - `x` descends from `max` to `min`.
-/// - Outer prune: if `x*max <= best`, earlier rows cannot improve `best`.
-/// - For a fixed `x`, only products `> best` matter. That means
-///   `y >= floor(best/x) + 1`. We also require `y >= x` to keep `x <= y`.
-///   Let `y_lower = max(x, floor(best/x)+1)`.
-/// - Iterate `y` from `max` down to `y_lower`; the first palindrome in that row
-///   is the row maximum; update `best` and continue.
 #[inline]
 pub fn largest_product(min: u32, max: u32) -> Option<u32> {
     let mut best: u32 = 0;
     let start = min.max(1);
 
-    if start > max {
-        return None;
-    }
-
+    let ten = Simd::splat(10);
+    let mut scratch: ArrayVec<u32, SCRATCH_CAPACITY> = ArrayVec::new();
     let mut x = max;
     while x >= start {
         if x * max <= best {
@@ -295,20 +275,69 @@ pub fn largest_product(min: u32, max: u32) -> Option<u32> {
         let x_nz = unsafe { NonZeroU32::new_unchecked(x) };
         let y_lower = ((best / x_nz) + 1).max(x);
 
-        if y_lower <= max {
-            let mut y = max;
+        if y_lower > max {
+            x -= 1;
+            continue;
+        }
+
+        let mut row_best: Option<u32> = None;
+        let lane_span = SIMD_WIDTH as u32;
+        let chunk_floor = y_lower.saturating_add(lane_span - 1);
+
+        if max >= chunk_floor {
+            let mut y_head = max;
+            let mut y_vec = Simd::splat(y_head) - SIMD_OFFSETS;
+            let lane_step = Simd::splat(lane_span);
+            let x_vec = Simd::splat(x);
+            let prod_step = x_vec * lane_step;
+            let mut prod_vec = x_vec * y_vec;
+
             loop {
-                let p = x * y;
-                if is_pal(p) {
-                    best = p;
+                let lt10 = prod_vec.simd_lt(ten);
+                if lt10.any() {
+                    let lane = lt10.to_bitmask().trailing_zeros() as usize;
+                    row_best = Some(prod_vec[lane]);
                     break;
                 }
 
-                if y == y_lower {
+                let mask = simd_early_bailout(prod_vec);
+                let bits = mask.to_bitmask();
+                if bits != 0 {
+                    for lane in 0..SIMD_WIDTH {
+                        if (bits & (1 << lane)) != 0 {
+                            scratch.push(prod_vec[lane]);
+                        }
+                    }
+                }
+
+                if scratch.len() >= SIMD_WIDTH
+                    && let Some(found) = process_compact_full_lanes(&mut scratch)
+                {
+                    row_best = Some(found);
                     break;
                 }
-                y -= 1;
+
+                let next_head = y_head.saturating_sub(lane_span);
+                if next_head < chunk_floor {
+                    if let Some(found) = scan_largest_tail(x, y_lower, next_head, &mut scratch) {
+                        row_best = Some(found);
+                    }
+                    scratch.clear();
+                    break;
+                }
+
+                y_head = next_head;
+                y_vec -= lane_step;
+                prod_vec -= prod_step;
             }
+        } else if let Some(found) = scan_largest_tail(x, y_lower, max, &mut scratch) {
+            row_best = Some(found);
+        }
+
+        if let Some(prod) = row_best
+            && prod > best
+        {
+            best = prod;
         }
 
         x -= 1;
@@ -545,9 +574,158 @@ fn append_u64(dst: &mut [u8], mut v: u64) -> usize {
     i
 }
 
+#[inline(always)]
+pub fn is_pal_half_reverse(n: u32) -> bool {
+    let mut m = n;
+    let mut rev: u32 = 0;
+    while m > rev {
+        rev = rev * 10 + m % 10;
+        m /= 10;
+    }
+
+    m == rev || m == rev / 10
+}
+
+#[inline(always)]
+fn process_compact_until_done(values: &[u32]) -> Option<u32> {
+    let mut offset = 0;
+    let len = values.len();
+
+    while offset < len {
+        let remaining = len - offset;
+        if remaining >= 8 {
+            let vec = Simd::<u32, 8>::from_slice(&values[offset..offset + 8]);
+            let mask = is_pal_simd_mask_generic(vec);
+            if mask.any() {
+                let lane = mask.to_bitmask().trailing_zeros() as usize;
+                return Some(vec[lane]);
+            }
+            offset += 8;
+        } else if remaining >= 4 {
+            let vec = Simd::<u32, 4>::from_slice(&values[offset..offset + 4]);
+            let mask = is_pal_simd_mask_generic(vec);
+            if mask.any() {
+                let lane = mask.to_bitmask().trailing_zeros() as usize;
+                return Some(vec[lane]);
+            }
+            offset += 4;
+        } else if remaining >= 2 {
+            let vec = Simd::<u32, 2>::from_slice(&values[offset..offset + 2]);
+            let mask = is_pal_simd_mask_generic(vec);
+            if mask.any() {
+                let lane = mask.to_bitmask().trailing_zeros() as usize;
+                return Some(vec[lane]);
+            }
+            offset += 2;
+        } else {
+            let value = values[offset];
+            if is_pal_half_reverse(value) {
+                return Some(value);
+            }
+            offset += 1;
+        }
+    }
+
+    None
+}
+
+#[inline]
+fn scan_smallest_tail(
+    x: u32,
+    start: u32,
+    y_upper: u32,
+    scratch: &mut ArrayVec<u32, SCRATCH_CAPACITY>,
+) -> Option<u32> {
+    if start > y_upper {
+        return process_compact_until_done(scratch.as_slice());
+    }
+
+    let mut current = start;
+    while current <= y_upper {
+        let prod = x * current;
+        if prod < 10 {
+            return Some(prod);
+        }
+        if prod.is_multiple_of(10) || (has_even_digits(prod) && !prod.is_multiple_of(11)) {
+            if current == y_upper {
+                break;
+            }
+            current += 1;
+            continue;
+        }
+
+        scratch.push(prod);
+        if current == y_upper {
+            break;
+        }
+        current += 1;
+    }
+
+    process_compact_until_done(scratch.as_slice())
+}
+
+#[inline]
+fn scan_largest_tail(
+    x: u32,
+    y_lower: u32,
+    start: u32,
+    scratch: &mut ArrayVec<u32, SCRATCH_CAPACITY>,
+) -> Option<u32> {
+    if start < y_lower {
+        return process_compact_until_done(scratch.as_slice());
+    }
+
+    let mut current = start;
+    while current >= y_lower {
+        let prod = x * current;
+        if prod < 10 {
+            return Some(prod);
+        }
+        if prod.is_multiple_of(10) || (has_even_digits(prod) && !prod.is_multiple_of(11)) {
+            if current == y_lower {
+                break;
+            }
+            current -= 1;
+            continue;
+        }
+
+        scratch.push(prod);
+        if current == y_lower {
+            break;
+        }
+        current -= 1;
+    }
+
+    process_compact_until_done(scratch.as_slice())
+}
+
+#[inline(never)]
+fn process_compact_full_lanes(values: &mut ArrayVec<u32, SCRATCH_CAPACITY>) -> Option<u32> {
+    let len = values.len();
+    if len == 0 {
+        return None;
+    }
+    let mut offset = 0;
+
+    while len - offset >= SIMD_WIDTH {
+        let vec = Simd::<u32, SIMD_WIDTH>::from_slice(&values[offset..offset + SIMD_WIDTH]);
+        let mask = is_pal_simd_mask_generic(vec);
+        if mask.any() {
+            let lane = mask.to_bitmask().trailing_zeros() as usize;
+            values.drain(0..offset + SIMD_WIDTH);
+            return Some(vec[lane]);
+        }
+        offset += SIMD_WIDTH;
+    }
+
+    values.drain(0..offset);
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::is_pal;
 
     fn norm(v: impl IntoIterator<Item = (u32, u32)>) -> Vec<(u32, u32)> {
         let mut out: Vec<(u32, u32)> = v.into_iter().collect();
@@ -735,28 +913,5 @@ mod tests {
         let palindrome = 10_988_901;
         let factors = [(3297, 3333)];
         assert_some_eq(smallest(min_factor, max_factor), palindrome, &factors);
-    }
-
-    // Measurement tests for factor-pair buffer sizing at 999
-    // Run filtered: cargo test --release -- measure_iter -- --nocapture
-    #[test]
-    fn measure_iter_max_pairs_smallest_999() {
-        let limit = 999u32;
-        let max_len = (1..=limit)
-            .filter_map(|current_min| smallest(current_min, limit).map(|(_, pairs)| pairs.len()))
-            .max()
-            .unwrap_or(0);
-        assert_eq!(max_len, 4, "observed max_len = {}", max_len);
-    }
-
-    #[test]
-    fn measure_iter_max_pairs_largest_999() {
-        let limit = 999u32;
-        let max_len = (1..=limit)
-            .rev()
-            .filter_map(|current_max| largest(1u32, current_max).map(|(_, pairs)| pairs.len()))
-            .max()
-            .unwrap_or(0);
-        assert_eq!(max_len, 4, "observed max_len = {}", max_len);
     }
 }

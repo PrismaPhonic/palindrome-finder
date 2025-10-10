@@ -1,3 +1,6 @@
+#![allow(clippy::identity_op)]
+#![feature(portable_simd)]
+
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use palprod_rust::{
     collect_factor_pairs, collect_factor_pairs_range,
@@ -6,10 +9,17 @@ use palprod_rust::{
         largest_functional, largest_product_functional, smallest_functional,
         smallest_product_functional,
     },
-    is_pal, largest, largest_product, smallest, smallest_product,
+    is_pal, largest, largest_product,
+    simd::{
+        is_pal_simd_mask, largest as largest_simd, largest_product as largest_product_simd,
+        smallest as smallest_simd, smallest_product as smallest_product_simd,
+    },
+    smallest, smallest_product,
 };
-use std::time::Instant;
+use std::simd::Simd;
 use std::{env, time::Duration};
+
+const SIMD_BATCH: usize = 8;
 
 macro_rules! pal_step {
     ($n:ident, $rev:ident) => {{
@@ -291,6 +301,22 @@ fn bench_palindrome_checks(c: &mut Criterion) {
         });
     }
 
+    if should_run("is_pal_simd") {
+        c.bench_function("is_pal_simd", |b| {
+            b.iter(|| {
+                let mut acc = 0u32;
+                let mut buf = [0u32; SIMD_BATCH];
+                for chunk in inputs.chunks(SIMD_BATCH) {
+                    buf.fill(0);
+                    buf[..chunk.len()].copy_from_slice(chunk);
+                    let vec = Simd::from_array(buf);
+                    acc += is_pal_simd_mask(vec).to_bitmask().count_ones();
+                }
+                black_box(acc)
+            });
+        });
+    }
+
     if should_run("is_pal_digit_dispatch") {
         c.bench_function("is_pal_digit_dispatch", |b| {
             b.iter(|| {
@@ -326,6 +352,16 @@ fn bench_largest_search_products(c: &mut Criterion) {
             });
         });
     }
+
+    if should_run("largest_product_simd") {
+        c.bench_function("largest_product_simd_100_999", |b| {
+            b.iter(|| {
+                let res = largest_product_simd(black_box(100), black_box(999));
+                debug_assert_eq!(res, expected);
+                black_box(res)
+            });
+        });
+    }
 }
 
 fn bench_largest(c: &mut Criterion) {
@@ -347,6 +383,14 @@ fn bench_largest(c: &mut Criterion) {
         });
     }
 
+    if should_run("largest_simd") {
+        c.bench_function("largest_simd_100_999", |b| {
+            b.iter(|| {
+                let res = largest_simd(black_box(100), black_box(999));
+                black_box(res)
+            });
+        });
+    }
 }
 
 fn bench_smallest(c: &mut Criterion) {
@@ -363,6 +407,15 @@ fn bench_smallest(c: &mut Criterion) {
         c.bench_function("smallest_functional_910_999", |b| {
             b.iter(|| {
                 let res = smallest_functional(black_box(910), black_box(999));
+                black_box(res)
+            });
+        });
+    }
+
+    if should_run("smallest_simd") {
+        c.bench_function("smallest_simd_910_999", |b| {
+            b.iter(|| {
+                let res = smallest_simd(black_box(910), black_box(999));
                 black_box(res)
             });
         });
@@ -391,6 +444,32 @@ fn bench_smallest_search_products(c: &mut Criterion) {
             });
         });
     }
+
+    if should_run("smallest_product_simd") {
+        c.bench_function("smallest_product_simd_910_999", |b| {
+            b.iter(|| {
+                let res = smallest_product_simd(black_box(910), black_box(999));
+                debug_assert_eq!(res, expected);
+                black_box(res)
+            });
+        });
+    }
+}
+
+fn bench_smallest_product(c: &mut Criterion) {
+    let filter = std::env::args().skip(1).collect::<Vec<_>>();
+    if !filter.is_empty() && !filter.iter().any(|arg| arg.contains("smallest_product")) {
+        return;
+    }
+
+    let mut group = c.benchmark_group("smallest_product");
+    group.bench_function("smallest_product_scalar", |b| {
+        b.iter(|| smallest_product(black_box(100u32), black_box(999u32)))
+    });
+    group.bench_function("smallest_product_simd", |b| {
+        b.iter(|| smallest_product_simd(black_box(100u32), black_box(999u32)))
+    });
+    group.finish();
 }
 
 fn should_run(name: &str) -> bool {
@@ -526,7 +605,7 @@ criterion_group! {
         .sample_size(1000)
         .warm_up_time(Duration::from_millis(500))
         .measurement_time(Duration::from_secs(30));
-    targets = bench_has_even_digits, bench_palindrome_checks, bench_largest_search_products, bench_smallest_search_products, bench_factor_pair_collection, bench_smallest, bench_largest, bench_do_iters_overhead
+    targets = bench_has_even_digits, bench_palindrome_checks, bench_largest_search_products, bench_smallest_search_products, bench_factor_pair_collection, bench_smallest, bench_largest, bench_do_iters_overhead, bench_smallest_product
 }
 
 criterion_main!(benches);

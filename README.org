@@ -290,10 +290,12 @@ Latest average times per iteration (sorted from largest to smallest, then fastes
 | Rust                         | 2..999 | largest  | 1.7585 µs |
 | Rust Functional              | 2..999 | largest  | 1.7608 µs |
 | Rust (PGO + Bolt)            | 2..999 | largest  | 1.7716 µs |
+| Rust (simd)                  | 2..999 | largest  | 1.9432 µs |
 | Common Lisp                  | 2..999 | largest  | 2.1744 µs |
 | Golang                       | 2..999 | largest  | 2.2108 µs |
 | Golang (PGO)                 | 2..999 | largest  | 2.2430 µs |
 | Coalton                      | 2..999 | largest  | 2.5532 µs |
+| Rust (simd)                  | 2..999 | smallest | 1.8668 µs |
 | Rust Functional (PGO + Bolt) | 2..999 | smallest | 1.9471 µs |
 | Rust (PGO + Bolt)            | 2..999 | smallest | 1.9569 µs |
 | Haskell                      | 2..999 | smallest | 2.0159 µs |
