@@ -154,9 +154,9 @@ fn simd_early_bailout<const LANES: usize>(n: SimdU32<LANES>) -> SimdMask<LANES>
 where
     LaneCount<LANES>: SupportedLaneCount,
 {
-    let (_n_div10, n_mod10) = div_mod_10(n);
-    let trailing_zero = n_mod10.simd_eq(zero()) & n.simd_ne(zero());
-    let (_n_div11, n_mod11) = div_mod_11(n);
+    let (_, n_mod10) = div_mod_10(n);
+    let trailing_zero = n_mod10.simd_eq(zero());
+    let (_, n_mod11) = div_mod_11(n);
     let even_fail = has_even_digits_mask(n) & n_mod11.simd_ne(zero());
 
     !trailing_zero & !even_fail
@@ -197,7 +197,7 @@ pub fn smallest_product(min: u32, max: u32) -> Option<u32> {
         if chunk_ceiling >= x {
             let x_vec = Simd::splat(x);
             let mut y_base = x;
-            let mut y_vec = Simd::splat(y_base) + SIMD_OFFSETS;
+            let y_vec = Simd::splat(y_base) + SIMD_OFFSETS;
             let lane_step = Simd::splat(lane_span);
             let prod_step = x_vec * lane_step;
             let mut prod_vec = x_vec * y_vec;
@@ -237,7 +237,6 @@ pub fn smallest_product(min: u32, max: u32) -> Option<u32> {
                 }
 
                 y_base = next_base;
-                y_vec += lane_step;
                 prod_vec += prod_step;
             }
         } else if let Some(found) = scan_smallest_tail(x, x, y_upper, &mut scratch) {
@@ -286,6 +285,12 @@ where
         }
     }
 
+    if scratch.len() >= SIMD_WIDTH
+        && let Some(found) = process_compact_full_lanes(scratch)
+    {
+        return Some(found);
+    }
+
     None
 }
 
@@ -293,7 +298,7 @@ where
 #[inline(always)]
 fn process_largest_palindrome_candidates<const LANES: usize>(
     x_vec: SimdU32<LANES>,
-    mut y_vec: SimdU32<LANES>,
+    y_vec: SimdU32<LANES>,
     mut y_head: u32,
     chunk_floor: u32,
     lane_step: SimdU32<LANES>,
@@ -311,18 +316,11 @@ where
             return (Some(best), y_head);
         }
 
-        if scratch.len() >= SIMD_WIDTH
-            && let Some(found) = process_compact_full_lanes(scratch)
-        {
-            return (Some(found), y_head);
-        }
-
         y_head = y_head.saturating_sub(LANES as u32);
         if y_head < chunk_floor {
             break;
         }
 
-        y_vec -= lane_step;
         prod_vec -= prod_step;
     }
 
@@ -345,7 +343,6 @@ pub fn largest_product(min: u32, max: u32) -> Option<u32> {
         let x_nz = unsafe { NonZeroU32::new_unchecked(x) };
         let y_lower = ((best / x_nz) + 1).max(x);
 
-        let mut row_best: Option<u32> = None;
         let lane_span = SIMD_WIDTH as u32;
         let full_chunk_floor = y_lower.saturating_add(lane_span - 1);
         let half_chunk_floor = y_lower.saturating_add((lane_span / 2) - 1);
@@ -363,62 +360,50 @@ pub fn largest_product(min: u32, max: u32) -> Option<u32> {
                     ten,
                     &mut scratch,
                 ) {
-                    (Some(best), _) => {
-                        row_best = Some(best);
+                    (Some(row_best), _) => {
+                        if row_best > best {
+                            best = row_best;
+                        }
                         break;
                     }
                     (_, next_head) => y_head = next_head,
                 }
             } else if y_head >= half_chunk_floor {
-                match process_largest_palindrome_candidates(
-                    Simd::splat(x),
-                    Simd::splat(y_head) - HALF_SIMD_OFFSETS,
-                    y_head,
-                    half_chunk_floor,
-                    Simd::splat(4),
-                    Simd::splat(10),
-                    &mut scratch,
-                ) {
-                    (Some(best), _) => {
-                        row_best = Some(best);
-                        break;
+                let prod_vec = Simd::splat(x) * (Simd::splat(y_head) - HALF_SIMD_OFFSETS);
+                if let Some(row_best) =
+                    process_palindrome_candidates(prod_vec, Simd::splat(10), &mut scratch)
+                {
+                    if row_best > best {
+                        best = row_best;
                     }
-                    (_, next_head) => y_head = next_head,
+                    break;
                 }
+                y_head = y_head.saturating_sub(4);
             } else if y_head >= quarter_chunk_floor {
-                match process_largest_palindrome_candidates(
-                    Simd::splat(x),
-                    Simd::splat(y_head) - QUARTER_SIMD_OFFSETS,
-                    y_head,
-                    quarter_chunk_floor,
-                    Simd::splat(2),
-                    Simd::splat(10),
-                    &mut scratch,
-                ) {
-                    (Some(best), _) => {
-                        row_best = Some(best);
-                        break;
+                let prod_vec = Simd::splat(x) * (Simd::splat(y_head) - QUARTER_SIMD_OFFSETS);
+                if let Some(row_best) =
+                    process_palindrome_candidates(prod_vec, Simd::splat(10), &mut scratch)
+                {
+                    if row_best > best {
+                        best = row_best;
                     }
-                    (_, next_head) => y_head = next_head,
+                    break;
                 }
+                y_head = y_head.saturating_sub(4);
             } else {
                 let prod = x * max;
-                if let Some(best) = process_compact_until_done(&scratch) {
-                    row_best = Some(best);
-                } else if is_pal(prod) {
-                    row_best = Some(prod);
+                if let Some(row_best) = process_compact_until_done(&scratch)
+                    && row_best > best
+                {
+                    best = row_best;
+                } else if is_pal(prod) && prod > best {
+                    best = prod;
                 }
 
                 scratch.clear();
                 // Out of options at this point anyways, so break
                 break;
             }
-        }
-
-        if let Some(prod) = row_best
-            && prod > best
-        {
-            best = prod;
         }
 
         x -= 1;
