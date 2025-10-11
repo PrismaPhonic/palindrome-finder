@@ -7,10 +7,12 @@ use std::simd::cmp::{SimdPartialEq, SimdPartialOrd};
 use std::simd::num::SimdUint;
 use std::simd::{LaneCount, Mask, Simd, SupportedLaneCount};
 
-use crate::{collect_factor_pairs, has_even_digits};
+use crate::{collect_factor_pairs, has_even_digits, is_pal};
 
 const SIMD_WIDTH: usize = 8;
 const SIMD_OFFSETS: Simd<u32, SIMD_WIDTH> = Simd::from_array([0, 1, 2, 3, 4, 5, 6, 7]);
+const HALF_SIMD_OFFSETS: Simd<u32, 4> = Simd::from_array([0, 1, 2, 3]);
+const QUARTER_SIMD_OFFSETS: Simd<u32, 2> = Simd::from_array([0, 1]);
 const SCRATCH_CAPACITY: usize = SIMD_WIDTH * 2;
 
 type SimdMask<const LANES: usize> = Mask<i32, LANES>;
@@ -259,6 +261,74 @@ pub fn smallest(min: u32, max: u32) -> Option<(u32, ArrayVec<u32, 4>)> {
     smallest_product(min, max).map(|product| (product, collect_factor_pairs(product, min, max)))
 }
 
+#[inline(always)]
+fn process_palindrome_candidates<const LANES: usize>(
+    prod_vec: SimdU32<LANES>,
+    ten: SimdU32<LANES>,
+    scratch: &mut ArrayVec<u32, SCRATCH_CAPACITY>,
+) -> Option<u32>
+where
+    LaneCount<LANES>: SupportedLaneCount,
+{
+    let lt10 = prod_vec.simd_lt(ten);
+    if lt10.any() {
+        let lane = lt10.to_bitmask().trailing_zeros() as usize;
+        return Some(prod_vec[lane]);
+    }
+
+    let mask = simd_early_bailout(prod_vec);
+    let bits = mask.to_bitmask();
+    if bits != 0 {
+        for lane in 0..SIMD_WIDTH {
+            if (bits & (1 << lane)) != 0 {
+                scratch.push(prod_vec[lane]);
+            }
+        }
+    }
+
+    None
+}
+
+// Returns row best, if found, and where we left at on y_head.
+#[inline(always)]
+fn process_largest_palindrome_candidates<const LANES: usize>(
+    x_vec: SimdU32<LANES>,
+    mut y_vec: SimdU32<LANES>,
+    mut y_head: u32,
+    chunk_floor: u32,
+    lane_step: SimdU32<LANES>,
+    ten: SimdU32<LANES>,
+    scratch: &mut ArrayVec<u32, SCRATCH_CAPACITY>,
+) -> (Option<u32>, u32)
+where
+    LaneCount<LANES>: SupportedLaneCount,
+{
+    let prod_step = x_vec * lane_step;
+    let mut prod_vec = x_vec * y_vec;
+
+    loop {
+        if let Some(best) = process_palindrome_candidates(prod_vec, ten, scratch) {
+            return (Some(best), y_head);
+        }
+
+        if scratch.len() >= SIMD_WIDTH
+            && let Some(found) = process_compact_full_lanes(scratch)
+        {
+            return (Some(found), y_head);
+        }
+
+        y_head = y_head.saturating_sub(LANES as u32);
+        if y_head < chunk_floor {
+            break;
+        }
+
+        y_vec -= lane_step;
+        prod_vec -= prod_step;
+    }
+
+    (None, y_head)
+}
+
 #[inline]
 pub fn largest_product(min: u32, max: u32) -> Option<u32> {
     let mut best: u32 = 0;
@@ -275,63 +345,74 @@ pub fn largest_product(min: u32, max: u32) -> Option<u32> {
         let x_nz = unsafe { NonZeroU32::new_unchecked(x) };
         let y_lower = ((best / x_nz) + 1).max(x);
 
-        if y_lower > max {
-            x -= 1;
-            continue;
-        }
-
         let mut row_best: Option<u32> = None;
         let lane_span = SIMD_WIDTH as u32;
-        let chunk_floor = y_lower.saturating_add(lane_span - 1);
+        let full_chunk_floor = y_lower.saturating_add(lane_span - 1);
+        let half_chunk_floor = y_lower.saturating_add((lane_span / 2) - 1);
+        let quarter_chunk_floor = y_lower.saturating_add((lane_span / 4) - 1);
+        let mut y_head = max;
 
-        if max >= chunk_floor {
-            let mut y_head = max;
-            let mut y_vec = Simd::splat(y_head) - SIMD_OFFSETS;
-            let lane_step = Simd::splat(lane_span);
-            let x_vec = Simd::splat(x);
-            let prod_step = x_vec * lane_step;
-            let mut prod_vec = x_vec * y_vec;
-
-            loop {
-                let lt10 = prod_vec.simd_lt(ten);
-                if lt10.any() {
-                    let lane = lt10.to_bitmask().trailing_zeros() as usize;
-                    row_best = Some(prod_vec[lane]);
-                    break;
-                }
-
-                let mask = simd_early_bailout(prod_vec);
-                let bits = mask.to_bitmask();
-                if bits != 0 {
-                    for lane in 0..SIMD_WIDTH {
-                        if (bits & (1 << lane)) != 0 {
-                            scratch.push(prod_vec[lane]);
-                        }
+        while y_head >= y_lower {
+            if y_head >= full_chunk_floor {
+                match process_largest_palindrome_candidates(
+                    Simd::splat(x),
+                    Simd::splat(y_head) - SIMD_OFFSETS,
+                    y_head,
+                    full_chunk_floor,
+                    Simd::splat(lane_span),
+                    ten,
+                    &mut scratch,
+                ) {
+                    (Some(best), _) => {
+                        row_best = Some(best);
+                        break;
                     }
+                    (_, next_head) => y_head = next_head,
                 }
-
-                if scratch.len() >= SIMD_WIDTH
-                    && let Some(found) = process_compact_full_lanes(&mut scratch)
-                {
-                    row_best = Some(found);
-                    break;
-                }
-
-                let next_head = y_head.saturating_sub(lane_span);
-                if next_head < chunk_floor {
-                    if let Some(found) = scan_largest_tail(x, y_lower, next_head, &mut scratch) {
-                        row_best = Some(found);
+            } else if y_head >= half_chunk_floor {
+                match process_largest_palindrome_candidates(
+                    Simd::splat(x),
+                    Simd::splat(y_head) - HALF_SIMD_OFFSETS,
+                    y_head,
+                    half_chunk_floor,
+                    Simd::splat(4),
+                    Simd::splat(10),
+                    &mut scratch,
+                ) {
+                    (Some(best), _) => {
+                        row_best = Some(best);
+                        break;
                     }
-                    scratch.clear();
-                    break;
+                    (_, next_head) => y_head = next_head,
+                }
+            } else if y_head >= quarter_chunk_floor {
+                match process_largest_palindrome_candidates(
+                    Simd::splat(x),
+                    Simd::splat(y_head) - QUARTER_SIMD_OFFSETS,
+                    y_head,
+                    quarter_chunk_floor,
+                    Simd::splat(2),
+                    Simd::splat(10),
+                    &mut scratch,
+                ) {
+                    (Some(best), _) => {
+                        row_best = Some(best);
+                        break;
+                    }
+                    (_, next_head) => y_head = next_head,
+                }
+            } else {
+                let prod = x * max;
+                if let Some(best) = process_compact_until_done(&scratch) {
+                    row_best = Some(best);
+                } else if is_pal(prod) {
+                    row_best = Some(prod);
                 }
 
-                y_head = next_head;
-                y_vec -= lane_step;
-                prod_vec -= prod_step;
+                scratch.clear();
+                // Out of options at this point anyways, so break
+                break;
             }
-        } else if let Some(found) = scan_largest_tail(x, y_lower, max, &mut scratch) {
-            row_best = Some(found);
         }
 
         if let Some(prod) = row_best
@@ -696,7 +777,9 @@ fn scan_largest_tail(
         current -= 1;
     }
 
-    process_compact_until_done(scratch.as_slice())
+    let res = process_compact_until_done(scratch.as_slice());
+    scratch.clear();
+    res
 }
 
 #[inline(never)]
