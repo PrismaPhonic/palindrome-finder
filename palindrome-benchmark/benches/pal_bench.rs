@@ -140,6 +140,8 @@ pub fn benches(c: &mut Criterion) {
     let rust_fn_sm = "../target-bin/palprod-rust-functional-smallest";
     let rust_simd_lg = "../target-bin/palprod-rust-simd-largest";
     let rust_simd_sm = "../target-bin/palprod-rust-simd-smallest";
+    let rust_simd_bolt_lg = "../target-bin/palprod-rust-simd-largest-bolt-optimized";
+    let rust_simd_bolt_sm = "../target-bin/palprod-rust-simd-smallest-bolt-optimized";
     let rust_fn_lg_bolt_opt = "../target-bin/palprod-rust-functional-largest-bolt-optimized";
     let rust_fn_sm_bolt_opt = "../target-bin/palprod-rust-functional-smallest-bolt-optimized";
     let go_lg = "../target-bin/palprod-go-largest";
@@ -151,23 +153,39 @@ pub fn benches(c: &mut Criterion) {
     let coalton_lg = "../target-bin/palprod-coalton-largest";
     let coalton_sm = "../target-bin/palprod-coalton-smallest";
 
+    if std::path::Path::new(rust_simd_bolt_lg).exists() {
+        bench_servered(
+            c,
+            "RUST (simd)+BOLT largest 2..999",
+            rust_simd_bolt_lg,
+            2,
+            999,
+        );
+    }
+    if std::path::Path::new(rust_simd_bolt_sm).exists() {
+        bench_servered(
+            c,
+            "RUST (simd)+BOLT smallest 2..999",
+            rust_simd_bolt_sm,
+            2,
+            999,
+        );
+    }
+
     bench_servered(c, "RUST (simd)        largest 2..999", rust_simd_lg, 2, 999);
-    bench_servered(c, "RUST (simd)        smallest 2..999", rust_simd_sm, 2, 999);
+    bench_servered(
+        c,
+        "RUST (simd)        smallest 2..999",
+        rust_simd_sm,
+        2,
+        999,
+    );
 
     bench_servered(c, "RUST               largest 2..999", rust_lg, 2, 999);
     bench_servered(c, "RUST               smallest 2..999", rust_sm, 2, 999);
 
     bench_servered(c, "RUST (functional)  largest 2..999", rust_fn_lg, 2, 999);
     bench_servered(c, "RUST (functional)  smallest 2..999", rust_fn_sm, 2, 999);
-
-    bench_servered(c, "Common Lisp   largest 2..999", sbcl_lg, 2, 999);
-    bench_servered(c, "Common Lisp   smallest 2..999", sbcl_sm, 2, 999);
-
-    bench_servered(c, "Haskell largest 2..999", haskell_lg, 2, 999);
-    bench_servered(c, "Haskell smallest 2..999", haskell_sm, 2, 999);
-
-    bench_servered(c, "Coalton largest 2..999", coalton_lg, 2, 999);
-    bench_servered(c, "Coalton smallest 2..999", coalton_sm, 2, 999);
 
     if std::path::Path::new(rust_lg_bolt_opt).exists() {
         bench_servered(c, "RUST+BOLT largest 2..999", rust_lg_bolt_opt, 2, 999);
@@ -193,6 +211,15 @@ pub fn benches(c: &mut Criterion) {
             999,
         );
     }
+
+    bench_servered(c, "Common Lisp   largest 2..999", sbcl_lg, 2, 999);
+    bench_servered(c, "Common Lisp   smallest 2..999", sbcl_sm, 2, 999);
+
+    bench_servered(c, "Haskell largest 2..999", haskell_lg, 2, 999);
+    bench_servered(c, "Haskell smallest 2..999", haskell_sm, 2, 999);
+
+    bench_servered(c, "Coalton largest 2..999", coalton_lg, 2, 999);
+    bench_servered(c, "Coalton smallest 2..999", coalton_sm, 2, 999);
 
     bench_servered(c, "GO     largest 2..999", go_lg, 2, 999);
     bench_servered(c, "GO     smallest 2..999", go_sm, 2, 999);

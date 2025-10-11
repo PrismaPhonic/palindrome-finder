@@ -221,7 +221,7 @@ pub fn smallest_product(min: u32, max: u32) -> Option<u32> {
                 }
 
                 if scratch.len() >= SIMD_WIDTH
-                    && let Some(found) = process_compact_full_lanes(&mut scratch)
+                    && let Some(found) = process_compact_full_lane(&mut scratch)
                 {
                     row_best = Some(found);
                     break;
@@ -286,7 +286,7 @@ where
     }
 
     if scratch.len() >= SIMD_WIDTH
-        && let Some(found) = process_compact_full_lanes(scratch)
+        && let Some(found) = process_compact_full_lane(scratch)
     {
         return Some(found);
     }
@@ -767,26 +767,18 @@ fn scan_largest_tail(
     res
 }
 
-#[inline(never)]
-fn process_compact_full_lanes(values: &mut ArrayVec<u32, SCRATCH_CAPACITY>) -> Option<u32> {
-    let len = values.len();
-    if len == 0 {
-        return None;
-    }
-    let mut offset = 0;
-
-    while len - offset >= SIMD_WIDTH {
-        let vec = Simd::<u32, SIMD_WIDTH>::from_slice(&values[offset..offset + SIMD_WIDTH]);
-        let mask = is_pal_simd_mask_generic(vec);
-        if mask.any() {
-            let lane = mask.to_bitmask().trailing_zeros() as usize;
-            values.drain(0..offset + SIMD_WIDTH);
-            return Some(vec[lane]);
-        }
-        offset += SIMD_WIDTH;
+/// Processes one full simd lane, removing it from the supplied scratch.
+#[inline(always)]
+fn process_compact_full_lane(values: &mut ArrayVec<u32, SCRATCH_CAPACITY>) -> Option<u32> {
+    let vec = Simd::<u32, SIMD_WIDTH>::from_slice(&values[0..SIMD_WIDTH]);
+    let mask = is_pal_simd_mask_generic(vec);
+    if mask.any() {
+        let lane = mask.to_bitmask().trailing_zeros() as usize;
+        values.drain(0..SIMD_WIDTH);
+        return Some(vec[lane]);
     }
 
-    values.drain(0..offset);
+    values.drain(0..SIMD_WIDTH);
     None
 }
 
