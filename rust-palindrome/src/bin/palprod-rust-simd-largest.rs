@@ -1,4 +1,5 @@
-use palprod_rust::simd::{largest, run_iters_desc, run_server};
+use palprod_rust::simd::largest;
+use palprod_rust::{run_iters_desc, run_server};
 use std::env;
 
 fn main() {

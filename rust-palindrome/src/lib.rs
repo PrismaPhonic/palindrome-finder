@@ -759,4 +759,42 @@ mod tests {
             .unwrap_or(0);
         assert_eq!(max_len, 4, "observed max_len = {}", max_len);
     }
+
+    #[test]
+    fn debug_panic_case_29_999() {
+        // This is the specific case that causes the panic in SIMD version
+        let min = 29;
+        let max = 999;
+        
+        // Test the correct implementation
+        let result = smallest(min, max);
+        match result {
+            Some((product, factors)) => {
+                println!("Correct result for smallest({}, {}): product={}, factors={:?}", 
+                         min, max, product, factors);
+                
+                // Verify the factors are valid
+                for i in (0..factors.len()).step_by(2) {
+                    if i + 1 < factors.len() {
+                        let x = factors[i];
+                        let y = factors[i + 1];
+                        assert_eq!(x * y, product, "Factor pair ({}, {}) doesn't multiply to {}", x, y, product);
+                        assert!(x >= min && x <= max, "Factor x={} not in range [{}, {}]", x, min, max);
+                        assert!(y >= min && y <= max, "Factor y={} not in range [{}, {}]", y, min, max);
+                        assert!(x <= y, "Factor pair ({}, {}) not ordered", x, y);
+                    }
+                }
+                
+                // Verify it's actually a palindrome
+                assert!(is_pal(product), "Product {} is not a palindrome", product);
+                
+                // Verify it's the smallest possible
+                let direct_product = smallest_product(min, max);
+                assert_eq!(direct_product, Some(product), "smallest_product doesn't match smallest");
+            }
+            None => {
+                panic!("No palindrome found for range [{}, {}]", min, max);
+            }
+        }
+    }
 }

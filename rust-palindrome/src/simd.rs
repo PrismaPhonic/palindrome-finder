@@ -1,6 +1,5 @@
-use std::io::{BufRead, BufReader, Write};
 use std::num::NonZeroU32;
-use std::time::Instant;
+use std::ptr;
 
 use arrayvec::ArrayVec;
 use std::simd::cmp::{SimdPartialEq, SimdPartialOrd};
@@ -182,73 +181,73 @@ pub fn smallest_product(min: u32, max: u32) -> Option<u32> {
         let x_nz = unsafe { NonZeroU32::new_unchecked(x) };
         let y_upper = ((best - 1) / x_nz).min(max);
 
-        if y_upper <= x {
-            if x == max {
-                break;
-            }
+        if y_upper < x {
             x += 1;
             continue;
         }
 
-        let mut row_best: Option<u32> = None;
         let lane_span = SIMD_WIDTH as u32;
-        let chunk_ceiling = y_upper.saturating_sub(lane_span - 1);
+        let full_chunk_ceiling = y_upper.saturating_sub(lane_span - 1);
+        let half_chunk_ceiling = y_upper.saturating_sub((lane_span / 2) - 1);
+        let quarter_chunk_ceiling = y_upper.saturating_sub((lane_span / 4) - 1);
+        let mut y_base = x;
 
-        if chunk_ceiling >= x {
-            let x_vec = Simd::splat(x);
-            let mut y_base = x;
-            let y_vec = Simd::splat(y_base) + SIMD_OFFSETS;
-            let lane_step = Simd::splat(lane_span);
-            let prod_step = x_vec * lane_step;
-            let mut prod_vec = x_vec * y_vec;
-
-            loop {
-                let lt10 = prod_vec.simd_lt(ten);
-                if lt10.any() {
-                    let lane = lt10.to_bitmask().trailing_zeros() as usize;
-                    row_best = Some(prod_vec[lane]);
-                    break;
-                }
-
-                let mask = simd_early_bailout(prod_vec);
-                let bits = mask.to_bitmask();
-                if bits != 0 {
-                    for lane in 0..SIMD_WIDTH {
-                        if (bits & (1 << lane)) != 0 {
-                            scratch.push(prod_vec[lane]);
+        while y_base <= y_upper {
+            if y_base <= full_chunk_ceiling {
+                match process_smallest_palindrome_candidates(
+                    Simd::splat(x),
+                    Simd::splat(y_base) + SIMD_OFFSETS,
+                    y_base,
+                    full_chunk_ceiling,
+                    ten,
+                    &mut scratch,
+                ) {
+                    (Some(row_best), _) => {
+                        if row_best < best {
+                            best = row_best;
                         }
+                        break;
                     }
+                    (_, next_base) => y_base = next_base,
                 }
-
-                if scratch.len() >= SIMD_WIDTH
-                    && let Some(found) = process_compact_full_lane(&mut scratch)
+            } else if y_base <= half_chunk_ceiling {
+                let prod_vec = Simd::splat(x) * (Simd::splat(y_base) + HALF_SIMD_OFFSETS);
+                if let Some(row_best) =
+                    process_palindrome_candidates(prod_vec, Simd::splat(10), &mut scratch)
                 {
-                    row_best = Some(found);
-                    break;
-                }
-
-                let next_base = y_base.saturating_add(lane_span);
-                if next_base > chunk_ceiling {
-                    if let Some(found) = scan_smallest_tail(x, next_base, y_upper, &mut scratch) {
-                        row_best = Some(found);
+                    if row_best < best {
+                        best = row_best;
                     }
-                    scratch.clear();
                     break;
                 }
+                y_base += 4;
+            } else if y_base <= quarter_chunk_ceiling {
+                let prod_vec = Simd::splat(x) * (Simd::splat(y_base) + QUARTER_SIMD_OFFSETS);
+                if let Some(row_best) =
+                    process_palindrome_candidates(prod_vec, Simd::splat(10), &mut scratch)
+                {
+                    if row_best < best {
+                        best = row_best;
+                    }
+                    break;
+                }
+                y_base += 2;
+            } else {
+                let prod = x * y_upper;
+                if let Some(row_best) = process_compact_until_done_ptr(&scratch)
+                    && row_best < best
+                {
+                    best = row_best;
+                } else if is_pal(prod) && prod < best {
+                    best = prod;
+                }
 
-                y_base = next_base;
-                prod_vec += prod_step;
+                // Out of options at this point anyways, so break
+                break;
             }
-        } else if let Some(found) = scan_smallest_tail(x, x, y_upper, &mut scratch) {
-            row_best = Some(found);
         }
 
-        if let Some(prod) = row_best
-            && prod < best
-        {
-            best = prod;
-        }
-
+        scratch.clear();
         x += 1;
     }
 
@@ -271,27 +270,61 @@ where
 {
     let lt10 = prod_vec.simd_lt(ten);
     if lt10.any() {
+        // While it seems that we probably should process the scratch first
+        // before returning. we can logically work through all single digit
+        // cases for both smallest and largest.
+        //
+        // For smallest if we have single digit palindromes, they would all be
+        // processed first anyways meaning we wouldn't have scratch to process.
+        // In the case of largest, that's true too. Imagine we have a tight
+        // upper bound of 10, our first valid candidate is 9 (the next is 121,
+        // from 11 x 11) so all valid candidates start at single digits And if
+        // we were starting at 11, we would have bailed already even with large
+        // lanes.
         let lane = lt10.to_bitmask().trailing_zeros() as usize;
         return Some(prod_vec[lane]);
     }
 
     let mask = simd_early_bailout(prod_vec);
     let bits = mask.to_bitmask();
-    if bits != 0 {
-        for lane in 0..SIMD_WIDTH {
-            if (bits & (1 << lane)) != 0 {
-                scratch.push(prod_vec[lane]);
-            }
+    pack_scratch_from_bitmask(bits, prod_vec, scratch);
+
+    process_compact_full_lane_ptr(scratch)
+}
+
+// Very efficient packing of scratch based on bitmask, which removes bounds
+// checking, which in turn allows llvm to better optimize this with automatic
+// loop unrolling.
+#[inline(always)]
+fn pack_scratch_from_bitmask<const LANES: usize>(
+    bits: u64,
+    prod: SimdU32<LANES>,
+    scratch: &mut ArrayVec<u32, SCRATCH_CAPACITY>,
+) where
+    LaneCount<LANES>: SupportedLaneCount,
+{
+    let mut m = bits;
+    let mut len = scratch.len();
+    let need = m.count_ones() as usize;
+
+    // Improves performance by removing bounds checking in the loop.
+    assert!(len + need <= scratch.capacity());
+
+    let ptr = scratch.as_mut_ptr();
+
+    while m != 0 {
+        let lane = m.trailing_zeros() as usize;
+        m &= m - 1;
+        unsafe {
+            *ptr.add(len) = prod[lane];
+            len += 1;
         }
     }
 
-    if scratch.len() >= SIMD_WIDTH
-        && let Some(found) = process_compact_full_lane(scratch)
-    {
-        return Some(found);
+    // single header write at exit
+    unsafe {
+        scratch.set_len(len);
     }
-
-    None
 }
 
 // Returns row best, if found, and where we left at on y_head.
@@ -301,23 +334,35 @@ fn process_largest_palindrome_candidates<const LANES: usize>(
     y_vec: SimdU32<LANES>,
     mut y_head: u32,
     chunk_floor: u32,
-    lane_step: SimdU32<LANES>,
     ten: SimdU32<LANES>,
     scratch: &mut ArrayVec<u32, SCRATCH_CAPACITY>,
 ) -> (Option<u32>, u32)
 where
     LaneCount<LANES>: SupportedLaneCount,
 {
+    let lanes = LANES as u32;
+    let lane_step = Simd::splat(lanes);
     let prod_step = x_vec * lane_step;
     let mut prod_vec = x_vec * y_vec;
+    // We use a cutoff so we can save on the cost of saturating_sub use.
+    let cutoff = chunk_floor + lanes;
 
     loop {
         if let Some(best) = process_palindrome_candidates(prod_vec, ten, scratch) {
+            // next-head ignored by caller on hit, so we don't need to add an
+            // extra instruction to compute correct next head.
             return (Some(best), y_head);
         }
 
-        y_head = y_head.saturating_sub(LANES as u32);
-        if y_head < chunk_floor {
+        y_head -= lanes;
+        if y_head < cutoff {
+            // Next subtract could wrap, but we still have one more chunk to
+            // process, so we process it here.
+            prod_vec -= prod_step;
+            if let Some(best) = process_palindrome_candidates(prod_vec, ten, scratch) {
+                return (Some(best), y_head);
+            }
+            y_head = y_head.saturating_sub(lanes);
             break;
         }
 
@@ -325,6 +370,41 @@ where
     }
 
     (None, y_head)
+}
+
+// Returns row best, if found, and where we left at on y_base.
+#[inline(always)]
+fn process_smallest_palindrome_candidates<const LANES: usize>(
+    x_vec: SimdU32<LANES>,
+    y_vec: SimdU32<LANES>,
+    mut y_base: u32,
+    chunk_ceiling: u32,
+    ten: SimdU32<LANES>,
+    scratch: &mut ArrayVec<u32, SCRATCH_CAPACITY>,
+) -> (Option<u32>, u32)
+where
+    LaneCount<LANES>: SupportedLaneCount,
+{
+    let lanes = LANES as u32;
+    let lane_step = Simd::splat(lanes);
+    let prod_step = x_vec * lane_step;
+    let mut prod_vec = x_vec * y_vec;
+
+    loop {
+        if let Some(best) = process_palindrome_candidates(prod_vec, ten, scratch) {
+            return (Some(best), y_base);
+        }
+
+        y_base += lanes;
+
+        if y_base > chunk_ceiling {
+            break;
+        }
+
+        prod_vec += prod_step;
+    }
+
+    (None, y_base)
 }
 
 #[inline]
@@ -343,6 +423,11 @@ pub fn largest_product(min: u32, max: u32) -> Option<u32> {
         let x_nz = unsafe { NonZeroU32::new_unchecked(x) };
         let y_lower = ((best / x_nz) + 1).max(x);
 
+        if y_lower > max {
+            x += 1;
+            continue;
+        }
+
         let lane_span = SIMD_WIDTH as u32;
         let full_chunk_floor = y_lower.saturating_add(lane_span - 1);
         let half_chunk_floor = y_lower.saturating_add((lane_span / 2) - 1);
@@ -356,7 +441,6 @@ pub fn largest_product(min: u32, max: u32) -> Option<u32> {
                     Simd::splat(y_head) - SIMD_OFFSETS,
                     y_head,
                     full_chunk_floor,
-                    Simd::splat(lane_span),
                     ten,
                     &mut scratch,
                 ) {
@@ -392,7 +476,7 @@ pub fn largest_product(min: u32, max: u32) -> Option<u32> {
                 y_head = y_head.saturating_sub(4);
             } else {
                 let prod = x * max;
-                if let Some(row_best) = process_compact_until_done(&scratch)
+                if let Some(row_best) = process_compact_until_done_ptr(&scratch)
                     && row_best > best
                 {
                     best = row_best;
@@ -400,12 +484,12 @@ pub fn largest_product(min: u32, max: u32) -> Option<u32> {
                     best = prod;
                 }
 
-                scratch.clear();
                 // Out of options at this point anyways, so break
                 break;
             }
         }
 
+        scratch.clear();
         x -= 1;
     }
 
@@ -415,229 +499,6 @@ pub fn largest_product(min: u32, max: u32) -> Option<u32> {
 #[inline]
 pub fn largest(min: u32, max: u32) -> Option<(u32, ArrayVec<u32, 4>)> {
     largest_product(min, max).map(|product| (product, collect_factor_pairs(product, min, max)))
-}
-
-//
-// Simple line-protocol server used by the Criterion harness
-//
-
-/// Generic line-protocol server used by the benchmark harness.
-///
-/// Protocol (one command per line):
-/// - `INIT <min> <max>`: set the factor range (must be called first).
-/// - `WARMUP <iters>`: run `iters` iterations without reporting a result.
-/// - `RUN <iters>`: run `iters` iterations and print `OK <product>` with the
-///   last product found.
-/// - `QUIT`: exit.
-///
-/// The `do_iters(min, max, iters)` closure must do the full work (including
-/// factor pair building) and return the final product as `Option<u64>`.
-pub fn run_server<F>(mut do_iters: F)
-where
-    F: FnMut(u32, u32, u64) -> (Option<u32>, u64, u64),
-{
-    #[inline(always)]
-    fn next_field<'a>(buf: &'a [u8], i: &mut usize) -> &'a [u8] {
-        let s = *i;
-        while *i < buf.len() && buf[*i] != b' ' && buf[*i] != b'\n' {
-            *i += 1;
-        }
-        let field = &buf[s..*i];
-        if *i < buf.len() && buf[*i] == b' ' {
-            *i += 1;
-        }
-        field
-    }
-
-    let stdin = std::io::stdin();
-    let stdout = std::io::stdout();
-    let mut reader = BufReader::new(stdin.lock());
-    let mut writer = std::io::BufWriter::new(stdout.lock());
-
-    let mut buf: Vec<u8> = Vec::with_capacity(256);
-    let mut min: u32 = 0;
-    let mut max: u32 = 0;
-
-    loop {
-        buf.clear();
-        if reader
-            .read_until(b'\n', &mut buf)
-            .expect("This command parser very narrowly expects correct input")
-            == 0
-        {
-            // EOF
-            break;
-        }
-
-        // Command dispatch by first byte; jump directly to first integer
-        let cmd0 = buf[0];
-
-        if cmd0 == b'I' {
-            // INIT <min> <max>
-            let mut i = 5; // after "INIT "
-            let a_bytes = next_field(&buf, &mut i);
-            let b_bytes = next_field(&buf, &mut i);
-            min = parse_u32(a_bytes);
-            max = parse_u32(b_bytes);
-            writer.write_all(b"OK\n").unwrap();
-            writer.flush().unwrap();
-        } else if cmd0 == b'W' {
-            // WARMUP <iters>
-            let mut i = 7; // after "WARMUP "
-            let it_bytes = next_field(&buf, &mut i);
-            let iters = parse_u64(it_bytes);
-            let _ = do_iters(min, max, iters);
-            writer.write_all(b"OK\n").unwrap();
-            writer.flush().unwrap();
-        } else if cmd0 == b'R' {
-            // RUN <iters>
-            let mut i = 4; // after "RUN "
-            let it_bytes = next_field(&buf, &mut i);
-            let iters = parse_u64(it_bytes);
-            let (prod_opt, acc, nanos) = do_iters(min, max, iters);
-            let prod = prod_opt.unwrap_or(0);
-            let mut out = [0u8; 96];
-            let mut p = 0usize;
-            out[p..p + 3].copy_from_slice(b"OK ");
-            p += 3;
-            p += append_u32(&mut out[p..], prod);
-            out[p] = b' ';
-            p += 1;
-            p += append_u64(&mut out[p..], acc);
-            out[p] = b' ';
-            p += 1;
-            p += append_u64(&mut out[p..], nanos);
-            out[p] = b'\n';
-            p += 1;
-            writer.write_all(&out[..p]).unwrap();
-            writer.flush().unwrap();
-        } else if cmd0 == b'Q' {
-            // QUIT
-            break;
-        }
-    }
-}
-
-#[inline(always)]
-fn accumulate_result(acc: &mut u64, counter: &mut u64, result: Option<(u32, ArrayVec<u32, 4>)>) {
-    if let Some((prod, pairs)) = result {
-        *acc += prod as u64 + *counter + pairs.into_iter().map(|value| value as u64).sum::<u64>();
-        *counter += 1;
-    }
-}
-
-#[inline(always)]
-pub fn run_iters_desc<F>(min: u32, max: u32, iters: u64, finder: F) -> (Option<u32>, u64, u64)
-where
-    F: Fn(u32, u32) -> Option<(u32, ArrayVec<u32, 4>)>,
-{
-    let base_prod = finder(min, max).map(|(product, _)| product);
-
-    let mut acc: u64 = 0;
-    let mut counter: u64 = 0;
-    let mut current = max;
-    let start = Instant::now();
-
-    for _ in 0..iters {
-        accumulate_result(&mut acc, &mut counter, finder(min, current));
-
-        current = if current <= min { max } else { current - 1 };
-    }
-
-    let nanos = start.elapsed().as_nanos();
-    let elapsed_ns = if nanos > u64::MAX as u128 {
-        u64::MAX
-    } else {
-        nanos as u64
-    };
-
-    (base_prod, acc, elapsed_ns)
-}
-
-#[inline(always)]
-pub fn run_iters_asc<F>(min: u32, max: u32, iters: u64, finder: F) -> (Option<u32>, u64, u64)
-where
-    F: Fn(u32, u32) -> Option<(u32, ArrayVec<u32, 4>)>,
-{
-    let base_prod = finder(min, max).map(|(product, _)| product);
-
-    let mut acc: u64 = 0;
-    let mut counter: u64 = 0;
-    let mut current = min;
-    let start = Instant::now();
-
-    for _ in 0..iters {
-        accumulate_result(&mut acc, &mut counter, finder(current, max));
-
-        current = if current >= max { min } else { current + 1 };
-    }
-
-    let nanos = start.elapsed().as_nanos();
-    let elapsed_ns = if nanos > u64::MAX as u128 {
-        u64::MAX
-    } else {
-        nanos as u64
-    };
-
-    (base_prod, acc, elapsed_ns)
-}
-
-#[inline]
-fn parse_u32(bytes: &[u8]) -> u32 {
-    let mut v: u32 = 0;
-    for &c in bytes {
-        v = v.wrapping_mul(10).wrapping_add((c - b'0') as u32);
-    }
-    v
-}
-
-#[inline]
-fn parse_u64(bytes: &[u8]) -> u64 {
-    let mut v: u64 = 0;
-    for &c in bytes {
-        v = v.wrapping_mul(10).wrapping_add((c - b'0') as u64);
-    }
-    v
-}
-
-// Append decimal without allocation; returns bytes written
-#[inline]
-fn append_u32(dst: &mut [u8], mut v: u32) -> usize {
-    if v == 0 {
-        dst[0] = b'0';
-        return 1;
-    }
-    let mut tmp = [0u8; 10];
-    let mut i = 0;
-    while v > 0 {
-        tmp[i] = b'0' + (v % 10) as u8;
-        v /= 10;
-        i += 1;
-    }
-    // reverse into dst
-    for j in 0..i {
-        dst[j] = tmp[i - 1 - j];
-    }
-    i
-}
-
-#[inline]
-fn append_u64(dst: &mut [u8], mut v: u64) -> usize {
-    if v == 0 {
-        dst[0] = b'0';
-        return 1;
-    }
-    let mut tmp = [0u8; 20];
-    let mut i = 0;
-    while v > 0 {
-        tmp[i] = b'0' + (v % 10) as u8;
-        v /= 10;
-        i += 1;
-    }
-    for j in 0..i {
-        dst[j] = tmp[i - 1 - j];
-    }
-    i
 }
 
 #[inline(always)]
@@ -692,6 +553,60 @@ fn process_compact_until_done(values: &[u32]) -> Option<u32> {
         }
     }
 
+    None
+}
+
+#[inline(always)]
+pub fn process_compact_until_done_ptr(values: &[u32]) -> Option<u32> {
+    let mut off = 0;
+    let len = values.len();
+
+    while len - off >= 8 {
+        unsafe {
+            let v = Simd::<u32, 8>::from_array(ptr::read_unaligned(
+                values.as_ptr().add(off) as *const [u32; 8]
+            ));
+            let mask = is_pal_simd_mask_generic(v);
+            if mask.any() {
+                let lane = mask.to_bitmask().trailing_zeros() as usize;
+                return Some(ptr::read_unaligned(values.as_ptr().add(off + lane)));
+            }
+            off += 8;
+        }
+    }
+    while len - off >= 4 {
+        unsafe {
+            let v = Simd::<u32, 4>::from_array(ptr::read_unaligned(
+                values.as_ptr().add(off) as *const [u32; 4]
+            ));
+            let mask = is_pal_simd_mask_generic(v);
+            if mask.any() {
+                let lane = mask.to_bitmask().trailing_zeros() as usize;
+                return Some(ptr::read_unaligned(values.as_ptr().add(off + lane)));
+            }
+            off += 4;
+        }
+    }
+    while len - off >= 2 {
+        unsafe {
+            let v = Simd::<u32, 2>::from_array(ptr::read_unaligned(
+                values.as_ptr().add(off) as *const [u32; 2]
+            ));
+            let mask = is_pal_simd_mask_generic(v);
+            if mask.any() {
+                let lane = mask.to_bitmask().trailing_zeros() as usize;
+                return Some(ptr::read_unaligned(values.as_ptr().add(off + lane)));
+            }
+            off += 2;
+        }
+    }
+    while off < len {
+        let x = unsafe { ptr::read_unaligned(values.as_ptr().add(off)) };
+        if is_pal_half_reverse(x) {
+            return Some(x);
+        }
+        off += 1;
+    }
     None
 }
 
@@ -768,8 +683,15 @@ fn scan_largest_tail(
 }
 
 /// Processes one full simd lane, removing it from the supplied scratch.
+/// Returns the first found palindrome.
+/// We don't care about later palindromes because this is always processing for one "row"
+/// Within the context of each row the first palindrome found will always be the
+/// highest, so we can avoid processing the rest.
 #[inline(always)]
 fn process_compact_full_lane(values: &mut ArrayVec<u32, SCRATCH_CAPACITY>) -> Option<u32> {
+    if values.len() < SIMD_WIDTH {
+        return None; // caller can invoke unconditionally
+    }
     let vec = Simd::<u32, SIMD_WIDTH>::from_slice(&values[0..SIMD_WIDTH]);
     let mask = is_pal_simd_mask_generic(vec);
     if mask.any() {
@@ -780,6 +702,39 @@ fn process_compact_full_lane(values: &mut ArrayVec<u32, SCRATCH_CAPACITY>) -> Op
 
     values.drain(0..SIMD_WIDTH);
     None
+}
+
+#[inline(always)]
+fn process_compact_full_lane_ptr(values: &mut ArrayVec<u32, SCRATCH_CAPACITY>) -> Option<u32> {
+    let len = values.len();
+    if len < SIMD_WIDTH {
+        return None; // caller can invoke unconditionally
+    }
+
+    // Load first full lane without creating a [..8] slice.
+    let v = unsafe {
+        let p = values.as_ptr() as *const [u32; SIMD_WIDTH];
+        Simd::<u32, SIMD_WIDTH>::from_array(ptr::read_unaligned(p))
+    };
+
+    let mask = is_pal_simd_mask_generic(v);
+
+    // Grab the winning scalar from the backing buffer (avoid vec[lane] bounds check).
+    let found = if mask.any() {
+        let lane = mask.to_bitmask().trailing_zeros() as usize;
+        Some(unsafe { *values.as_ptr().add(lane) })
+    } else {
+        None
+    };
+
+    // Consume the lane with a single move.
+    unsafe {
+        let p = values.as_mut_ptr();
+        ptr::copy(p.add(SIMD_WIDTH), p, len - SIMD_WIDTH);
+        values.set_len(len - SIMD_WIDTH);
+    }
+
+    found
 }
 
 #[cfg(test)]
@@ -973,5 +928,43 @@ mod tests {
         let palindrome = 10_988_901;
         let factors = [(3297, 3333)];
         assert_some_eq(smallest(min_factor, max_factor), palindrome, &factors);
+    }
+
+    #[test]
+    fn debug_panic_case_29_999_simd() {
+        // Focus on just the x=33 case that's causing the issue
+        let x = 33u32;
+        let y_upper = 77u32;
+        let best = 2552u32; // from previous iteration
+
+        println!("Testing x={}, y_upper={}, best={}", x, y_upper, best);
+
+        let ten = Simd::splat(10);
+        let mut scratch: ArrayVec<u32, SCRATCH_CAPACITY> = ArrayVec::new();
+
+        let lane_span = SIMD_WIDTH as u32;
+        let full_chunk_ceiling = y_upper.saturating_sub(lane_span - 1);
+        let mut y_base = x;
+
+        println!("  full_chunk_ceiling={}", full_chunk_ceiling);
+
+        if y_base <= full_chunk_ceiling {
+            println!("  Processing full chunk at y_base={}", y_base);
+            match process_smallest_palindrome_candidates(
+                Simd::splat(x),
+                Simd::splat(y_base) + SIMD_OFFSETS,
+                y_base,
+                full_chunk_ceiling,
+                ten,
+                &mut scratch,
+            ) {
+                (Some(row_best), _) => {
+                    println!("  Found palindrome {} in full chunk", row_best);
+                }
+                (_, next_base) => {
+                    println!("  No palindrome found, next_base={}", next_base);
+                }
+            }
+        }
     }
 }
