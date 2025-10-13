@@ -187,9 +187,9 @@ pub fn smallest_product(min: u32, max: u32) -> Option<u32> {
         }
 
         let lane_span = SIMD_WIDTH as u32;
-        let full_chunk_ceiling = y_upper.saturating_sub(lane_span - 1);
-        let half_chunk_ceiling = y_upper.saturating_sub((lane_span / 2) - 1);
-        let quarter_chunk_ceiling = y_upper.saturating_sub((lane_span / 4) - 1);
+        let full_chunk_ceiling = y_upper - (lane_span - 1);
+        let half_chunk_ceiling = y_upper - ((lane_span / 2) - 1);
+        let quarter_chunk_ceiling = y_upper - ((lane_span / 4) - 1);
         let mut y_base = x;
 
         while y_base <= y_upper {
@@ -346,8 +346,6 @@ where
     let lane_step = Simd::splat(lanes);
     let prod_step = x_vec * lane_step;
     let mut prod_vec = x_vec * y_vec;
-    // We use a cutoff so we can save on the cost of saturating_sub use.
-    let cutoff = chunk_floor + lanes;
 
     loop {
         if let Some(best) = process_palindrome_candidates(prod_vec, ten, scratch) {
@@ -357,7 +355,7 @@ where
         }
 
         y_head -= lanes;
-        if y_head < cutoff {
+        if y_head < chunk_floor {
             break;
         }
 
@@ -384,7 +382,6 @@ where
     let lane_step = Simd::splat(lanes);
     let prod_step = x_vec * lane_step;
     let mut prod_vec = x_vec * y_vec;
-    let cutoff = chunk_ceiling.saturating_sub(lanes);
 
     loop {
         if let Some(best) = process_palindrome_candidates(prod_vec, ten, scratch) {
@@ -393,7 +390,7 @@ where
 
         y_base += lanes;
 
-        if y_base > cutoff {
+        if y_base > chunk_ceiling {
             break;
         }
 
@@ -425,9 +422,9 @@ pub fn largest_product(min: u32, max: u32) -> Option<u32> {
         }
 
         let lane_span = SIMD_WIDTH as u32;
-        let full_chunk_floor = y_lower.saturating_add(lane_span - 1);
-        let half_chunk_floor = y_lower.saturating_add((lane_span / 2) - 1);
-        let quarter_chunk_floor = y_lower.saturating_add((lane_span / 4) - 1);
+        let full_chunk_floor = y_lower + (lane_span - 1);
+        let half_chunk_floor = y_lower + ((lane_span / 2) - 1);
+        let quarter_chunk_floor = y_lower + ((lane_span / 4) - 1);
         let mut y_head = max;
 
         while y_head >= y_lower {
@@ -458,7 +455,7 @@ pub fn largest_product(min: u32, max: u32) -> Option<u32> {
                     }
                     break;
                 }
-                y_head = y_head.saturating_sub(4);
+                y_head -= 4;
             } else if y_head >= quarter_chunk_floor {
                 let prod_vec = Simd::splat(x) * (Simd::splat(y_head) - QUARTER_SIMD_OFFSETS);
                 if let Some(row_best) =
@@ -469,9 +466,9 @@ pub fn largest_product(min: u32, max: u32) -> Option<u32> {
                     }
                     break;
                 }
-                y_head = y_head.saturating_sub(4);
+                y_head -= 2;
             } else {
-                let prod = x * max;
+                let prod = x * y_lower;
                 if let Some(row_best) = process_compact_until_done_ptr(&scratch)
                     && row_best > best
                 {
@@ -942,7 +939,7 @@ mod tests {
 
         let lane_span = SIMD_WIDTH as u32;
         let full_chunk_ceiling = y_upper.saturating_sub(lane_span - 1);
-        let mut y_base = x;
+        let y_base = x;
 
         println!("  full_chunk_ceiling={}", full_chunk_ceiling);
 
