@@ -247,7 +247,9 @@ pub fn smallest_product(min: u32, max: u32) -> Option<u32> {
             }
         }
 
-        scratch.clear();
+        unsafe {
+            scratch.set_len(0);
+        }
         x += 1;
     }
 
@@ -483,7 +485,10 @@ pub fn largest_product(min: u32, max: u32) -> Option<u32> {
             }
         }
 
-        scratch.clear();
+        unsafe {
+            scratch.set_len(0);
+        }
+
         x -= 1;
     }
 
