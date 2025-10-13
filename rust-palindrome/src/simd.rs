@@ -356,13 +356,6 @@ where
 
         y_head -= lanes;
         if y_head < cutoff {
-            // Next subtract could wrap, but we still have one more chunk to
-            // process, so we process it here.
-            prod_vec -= prod_step;
-            if let Some(best) = process_palindrome_candidates(prod_vec, ten, scratch) {
-                return (Some(best), y_head);
-            }
-            y_head = y_head.saturating_sub(lanes);
             break;
         }
 
@@ -389,6 +382,7 @@ where
     let lane_step = Simd::splat(lanes);
     let prod_step = x_vec * lane_step;
     let mut prod_vec = x_vec * y_vec;
+    let cutoff = chunk_ceiling.saturating_sub(lanes);
 
     loop {
         if let Some(best) = process_palindrome_candidates(prod_vec, ten, scratch) {
@@ -397,7 +391,7 @@ where
 
         y_base += lanes;
 
-        if y_base > chunk_ceiling {
+        if y_base > cutoff {
             break;
         }
 
@@ -561,7 +555,7 @@ pub fn process_compact_until_done_ptr(values: &[u32]) -> Option<u32> {
     let mut off = 0;
     let len = values.len();
 
-    while len - off >= 8 {
+    if len - off >= 8 {
         unsafe {
             let v = Simd::<u32, 8>::from_array(ptr::read_unaligned(
                 values.as_ptr().add(off) as *const [u32; 8]
@@ -574,7 +568,7 @@ pub fn process_compact_until_done_ptr(values: &[u32]) -> Option<u32> {
             off += 8;
         }
     }
-    while len - off >= 4 {
+    if len - off >= 4 {
         unsafe {
             let v = Simd::<u32, 4>::from_array(ptr::read_unaligned(
                 values.as_ptr().add(off) as *const [u32; 4]
@@ -587,7 +581,7 @@ pub fn process_compact_until_done_ptr(values: &[u32]) -> Option<u32> {
             off += 4;
         }
     }
-    while len - off >= 2 {
+    if len - off >= 2 {
         unsafe {
             let v = Simd::<u32, 2>::from_array(ptr::read_unaligned(
                 values.as_ptr().add(off) as *const [u32; 2]
@@ -600,12 +594,11 @@ pub fn process_compact_until_done_ptr(values: &[u32]) -> Option<u32> {
             off += 2;
         }
     }
-    while off < len {
+    if off < len {
         let x = unsafe { ptr::read_unaligned(values.as_ptr().add(off)) };
         if is_pal_half_reverse(x) {
             return Some(x);
         }
-        off += 1;
     }
     None
 }
