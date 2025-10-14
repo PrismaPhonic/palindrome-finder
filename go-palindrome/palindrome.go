@@ -130,13 +130,17 @@ func Smallest(min, max uint32) *struct {
 			continue // no valid y in this row
 		}
 
-		for y := x; y <= yUpper; y++ {
-			// No prod >= best check needed; yUpper already enforces it.
-			prod := x * y // guaranteed < best via yUpper
+		y, prod := x, x*x
+		for {
 			if IsPal(prod) {
 				best = prod
-				break // row minimum found; move to next x
+				break
 			}
+			if y == yUpper {
+				break
+			}
+			y++
+			prod += x
 		}
 	}
 
@@ -186,12 +190,18 @@ func Largest(min, max uint32) *struct {
 			continue // no work for this row
 		}
 
-		for y := max; y >= yLower; y-- {
-			p := x * y // guaranteed > best by bounds of yLower
-			if IsPal(p) {
-				best = p // row maximum found
-				break    // move to next x
+		// Hoist initial product calculation and decrement by x
+		y, prod := max, x*max
+		for {
+			if IsPal(prod) {
+				best = prod
+				break
 			}
+			if y == yLower {
+				break
+			}
+			y--
+			prod -= x // decrement by x instead of recalculating x * y
 		}
 	}
 

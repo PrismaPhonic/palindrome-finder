@@ -49,14 +49,14 @@
  (ftype (function (word32) boolean) palindromep)
  (ftype (function (word32) boolean) even-digit-count-p)
  (ftype (function ((simple-array word32 (*)) word32)
-                 (simple-array word32 (*)))
+                  (simple-array word32 (*)))
         finalize-factor-buffer)
  (ftype (function (word32 word32 word32)
-                 (simple-array word32 (*)))
+                  (simple-array word32 (*)))
         collect-positive-factor-pairs)
  (ftype (function (word32 word32)
-                 (values (or null word32)
-                         (or null (simple-array word32 (*)))))
+                  (values (or null word32)
+                          (or null (simple-array word32 (*)))))
         smallest-inner largest-inner)
  (ftype (function (word32 word32) (values (or null word32) list))
         smallest largest)
@@ -64,10 +64,10 @@
         pairs-vector->list))
 
 (declaim (inline palindromep even-digit-count-p
-               finalize-factor-buffer
-               collect-positive-factor-pairs
-               pairs-vector->list
-               smallest-inner largest-inner))
+                 finalize-factor-buffer
+                 collect-positive-factor-pairs
+                 pairs-vector->list
+                 smallest-inner largest-inner))
 
 ;; ------------------------------------------------------------------
 
@@ -119,27 +119,23 @@
         (setf rev (the word32 (+ (the word32 (* rev 10)) r))
               m   q)))
 
-  ;; even length: m == rev; odd length: m == rev/10
-  (or (eql m rev)
-      (eql m (the word32 (truncate rev 10))))))
+    ;; even length: m == rev; odd length: m == rev/10
+    (or (eql m rev)
+        (eql m (the word32 (truncate rev 10))))))
 
 ;; ------------------------------------------------------------------
 ;; Allocation-tight builders for the flat factor-pair vector (unboxed)
 
 (defun finalize-factor-buffer (buffer count)
-  "Copy the first count entries from buffer (ub32) to a right-sized ub32 result.
-
-   This is used so we can create factor pairs with stack allocated arrays, and
-   avoid   pointer chasing. We finalize into a correctly sized output array with
-   this helper"
+  "Copy first COUNT entries to a right-sized ub32 vector (fast memcpy)."
   (declare (optimize (speed 3) (safety 0) (debug 0))
            (type (simple-array word32 (*)) buffer)
            (type word32 count)
            (dynamic-extent buffer))
   (let ((out (make-array count :element-type 'word32)))
     (declare (type (simple-array word32 (*)) out))
-    (loop for i of-type word32 from 0 below count do
-      (setf (aref out i) (aref buffer i)))
+    ;; SBCL turns REPLACE on simple (unsigned-byte 32) arrays into memmove/memcpy
+    (replace out buffer :start1 0 :end1 count :start2 0)
     out))
 
 (defun collect-positive-factor-pairs (product min max)
@@ -164,17 +160,18 @@
     (finalize-factor-buffer buff count)))
 
 (defun pairs-vector->list (vec)
-  "Convert flat vector [x0 y0 x1 y1 ...] to ((x y) ...)."
   (declare (type (or null (simple-array word32 (*))) vec))
   (if (or (null vec) (zerop (length vec)))
       nil
-      (let ((out '()))
-        (declare (type list out))
-        (loop for i of-type word32 from 0 below (length vec) by 2 do
+      (let ((out '())
+            (n   (length vec)))
+        (declare (type list out) (type fixnum n))
+        (loop for i fixnum from 0 below n by 2 do
           (push (list (the word32 (aref vec i))
                       (the word32 (aref vec (1+ i))))
                 out))
         (nreverse out))))
+
 
 ;; ------------------------------------------------------------------
 ;; Inner search functions (return product and flat vector; no lists)
@@ -202,33 +199,40 @@ Algorithm (ascending x, ascending y with a tight y upper bound):
     produce a smaller product in this row).
 
 This reduces calls to palindromep by shrinking each row as best improves."
-  (declare (type word32 min max))
+  (declare (type word32 min max)
+           (optimize (speed 3) (safety 0) (debug 0)))
   (let ((best +word32-max+))
-     (declare (type word32 best))
-     (block search
-       ;; x ascends
-       (loop for x of-type word32 from min to max do
-         ;; outer prune: after this, x*x only increases
-         (when (>= (the word32 (* x x)) best)
-           (return-from search))
-         ;; compute tight y upper bound from current best
-         (let* ((y-upper
-                  (min max (truncate (1- best) x)))) ; floor((best-1)/x)
-           (when (< y-upper x)
-             (return))                  ; no possible y in this row
-           (block row
-             ;; y ascends only until y-upper
-             (loop for y of-type word32 from x to y-upper
-                   for product of-type word32
-                     = #+sbcl (sb-ext:truly-the word32 (* x y))
-                   #-sbcl (* x y) do
-                     (when (palindromep product)
-                       (setf best product)
-                       (return-from row)))))))
-     ;; final answer
-     (if (< best +word32-max+)
-         (values best (collect-positive-factor-pairs best min max))
-         (values nil nil))))
+    (declare (type word32 best))
+    (block search
+      ;; x ascends
+      (loop for x of-type word32 from min to max do
+        ;; outer prune: after this, x*x only increases
+        (when (>= (the word32 (* x x)) best)
+          (return-from search))
+        ;; compute tight y upper bound from current best
+        (let* ((y-upper (min max (truncate (1- best) x)))) ; floor((best-1)/x)
+          (when (< y-upper x)
+            (return)) ; no possible y in this row
+          ;; Run inner row in FIXNUM space for fast incf
+          (locally
+              (declare (type fixnum y-upper))
+            (let* ((xf   (the fixnum x))
+                   (y    xf)
+                   (prod (the fixnum (* xf xf))))
+              (declare (type fixnum xf y prod))
+              (loop
+                (when (palindromep prod)
+                  ;; store back as word32; value range is safe
+                  (setf best (the word32 prod))
+                  (return))
+                (when (= y y-upper) (return))
+                (incf y)
+                (incf prod xf)))))))
+    ;; final answer
+    (if (< best +word32-max+)
+        (values best (collect-positive-factor-pairs best min max))
+        (values nil nil))))
+
 
 ;; ------------------------------
 ;; Largest Search
@@ -253,7 +257,8 @@ Algorithm (descending x, descending y with a tight y lower bound):
     make products smaller in this row).
 
 This mirrors the smallest optimization and further reduces palindromep calls."
-  (declare (type word32 min max))
+  (declare (type word32 min max)
+           (optimize (speed 3) (safety 0) (debug 0)))
   (let ((best 0))
     (declare (type word32 best))
     (block search
@@ -263,23 +268,28 @@ This mirrors the smallest optimization and further reduces palindromep calls."
         (when (<= (the word32 (* x max)) best)
           (return-from search))
         ;; compute tight y lower bound from current best
-        (let* ((y-lower
-                 (max x (1+ (truncate best x)))))
+        (let* ((y-lower (max x (1+ (truncate best x)))))
           (when (> y-lower max)
-            (return)) ; no possible y in this row
-          (block row
-            ;; y descends only down to y-lower
-            (loop for y of-type word32 from max downto y-lower
-                  for product of-type word32
-                    = #+sbcl (sb-ext:truly-the word32 (* x y))
-                  #-sbcl (* x y) do
-                    (when (palindromep product)
-                      (setf best product)
-                      (return-from row)))))))
+            (return))                               ; no possible y in this row
+          ;; Run inner row in FIXNUM space for fast decf
+          (locally
+              (declare (type fixnum y-lower))
+            (let* ((xf   (the fixnum x))
+                   (yf   (the fixnum max))
+                   (prod (the fixnum (* xf yf))))
+              (declare (type fixnum xf yf prod))
+              (loop
+                (when (palindromep prod)
+                  (setf best (the word32 prod))
+                  (return))
+                (when (= yf y-lower) (return))
+                (decf yf)
+                (decf prod xf)))))))
     ;; final answer
     (if (> best 0)
         (values best (collect-positive-factor-pairs best min max))
         (values nil nil))))
+
 
 ;; ------------------------------------------------------------------
 ;; Public wrappers (Exercism shape): convert vector -> list of lists

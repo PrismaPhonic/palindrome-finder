@@ -19,7 +19,7 @@ mkdir -p ../target-bin target/pgo-profiles || true
 build_one() {
   local cmd="$1"   # palprod-go-smallest | palprod-go-largest
   echo "[Go] Building baseline $cmd"
-  go build -o "$cmd" "./cmd/$cmd"
+  GOAMD64=v3 go build -ldflags="-s -w" -gcflags="all=-B -l=4" -o "$cmd" "./cmd/$cmd"
 }
 
 profile_one() {
@@ -40,7 +40,7 @@ build_with_pgo_one() {
   local prof_path="target/pgo-profiles/${cmd}.pprof"
   local out_path="../target-bin/${cmd}-pgo"
   echo "[Go] Building $cmd with PGO -> $out_path"
-  GOFLAGS="-pgo=$prof_path" go build -o "$out_path" "./cmd/$cmd"
+  GOAMD64=v3 GOFLAGS="-pgo=$prof_path" go build -ldflags="-s -w" -gcflags="all=-B -l=4" -o "$out_path" "./cmd/$cmd"
 }
 
 # Smallest

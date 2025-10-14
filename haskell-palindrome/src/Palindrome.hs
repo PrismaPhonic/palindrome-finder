@@ -127,64 +127,88 @@ collectPositiveFactorPairs product minVal maxVal = runST $ do
       copyLoop 0
       freeze result
 
--- | Find smallest palindromic product
+
 {-# INLINE smallest #-}
 smallest :: Word32 -> Word32 -> Maybe Result
 smallest minVal maxVal = case searchSmallest minVal maxVal of
-    Nothing -> Nothing
-    Just (prod, pairs) -> Just $ Result prod pairs
+  Nothing            -> Nothing
+  Just (prod, pairs) -> Just (Result prod pairs)
   where
-    searchSmallest !min' !max' = searchRowsForSmallest min' (maxBound :: Word32)
-      where
-        -- x ascends; outer prune mirrors Rust: break when x*x >= best
-        searchRowsForSmallest !x !best
-          | x > max' = if best == maxBound then Nothing else Just (best, collectPositiveFactorPairs best min' max')
-          | x * x >= best = if best == maxBound then Nothing else Just (best, collectPositiveFactorPairs best min' max')
-          | otherwise = case searchRowForSmallest x best of
-              Nothing -> searchRowsForSmallest (x + 1) best
-              Just newBest -> searchRowsForSmallest (x + 1) newBest
-          where
-            searchRowForSmallest !x' !currentBest
-              | yUpper < x' = Nothing
-              | otherwise = searchColumnForSmallest x' currentBest
-              where
-                yUpper = min max' ((currentBest - 1) `quot` x')
-                searchColumnForSmallest !y !rowBest
-                  | y > yUpper = if rowBest == maxBound then Nothing else Just rowBest
-                  | otherwise = let prod = x' * y
-                                in if isPalindrome prod
-                                     then Just prod
-                                     else searchColumnForSmallest (y + 1) rowBest
+    noHit :: Word32
+    noHit = maxBound
 
--- | Find largest palindromic product
+    -- Return the product and the factor-pair array (UArray)
+    searchSmallest :: Word32 -> Word32 -> Maybe (Word32, UArray Int Word32)
+    searchSmallest !min' !max' = searchRows min' noHit
+      where
+        -- x ascends; break when x*x >= best
+        searchRows :: Word32 -> Word32 -> Maybe (Word32, UArray Int Word32)
+        searchRows !x !best
+          | x > max'        = done best
+          | x * x >= best   = done best
+          | otherwise       =
+              case searchRow x best of
+                rowBest | rowBest == noHit -> searchRows (x + 1) best
+                        | otherwise        -> searchRows (x + 1) rowBest
+          where
+            done b
+              | b == noHit  = Nothing
+              | otherwise   = Just (b, collectPositiveFactorPairs b min' max')
+
+        -- One row: hoist initial prod = x'*x' and add x' each step
+        searchRow :: Word32 -> Word32 -> Word32
+        searchRow !x' !currentBest
+          | yUpper < x'   = noHit
+          | otherwise     = go x' (x' * x')
+          where
+            !yUpper = min max' ((currentBest - 1) `quot` x')
+            go !y !prod
+              | y > yUpper     = noHit
+              | isPalindrome prod = prod
+              | otherwise      = go (y + 1) (prod + x')
+
+
 {-# INLINE largest #-}
 largest :: Word32 -> Word32 -> Maybe Result
 largest minVal maxVal = case searchLargest minVal maxVal of
-    Nothing -> Nothing
-    Just (prod, pairs) -> Just $ Result prod pairs
+  Nothing            -> Nothing
+  Just (prod, pairs) -> Just (Result prod pairs)
   where
-    searchLargest !min' !max' = searchRowsForLargest max' 0
+    noHit :: Word32
+    noHit = 0
+
+    -- Return the product and the factor-pair array (UArray)
+    searchLargest :: Word32 -> Word32 -> Maybe (Word32, UArray Int Word32)
+    searchLargest !min' !max' = searchRows max' noHit
       where
-        -- x descends; outer prune mirrors Rust: break when x*max <= best
-        searchRowsForLargest !x !best
-          | x < min' = if best == 0 then Nothing else Just (best, collectPositiveFactorPairs best min' max')
-          | x * max' <= best = if best == 0 then Nothing else Just (best, collectPositiveFactorPairs best min' max')
-          | otherwise = case searchRowForLargest x of
-              Nothing -> searchRowsForLargest (x - 1) best
-              Just newBest -> searchRowsForLargest (x - 1) newBest
+        -- x descends; break when x*max' <= best
+        searchRows :: Word32 -> Word32 -> Maybe (Word32, UArray Int Word32)
+        searchRows !x !best
+          | x < min'            = done best
+          | x * max' <= best    = done best
+          | otherwise           =
+              let !rowBest = searchRow x best
+              in if rowBest == noHit
+                   then searchRows (x - 1) best
+                   else searchRows (x - 1) rowBest
           where
-            searchRowForLargest !x'
-              | otherwise =
-                  let yLower = max x' ((best `quot` x') + 1)
-                      searchColumnForLargest !y !currentBest
-                        | y < yLower = if currentBest == 0 then Nothing else Just currentBest
-                        | otherwise = let prod = x' * y
-                                      in if isPalindrome prod
-                                           then Just prod
-                                           else searchColumnForLargest (y - 1) currentBest
-                  in if yLower > max'
-                       then Nothing
-                       else searchColumnForLargest max' 0
+            done b
+              | b == noHit  = Nothing
+              | otherwise   = Just (b, collectPositiveFactorPairs b min' max')
+
+        -- One row: hoist prod = x'*max' and subtract x' each step
+        searchRow :: Word32 -> Word32 -> Word32
+        searchRow !x' !bestSoFar
+          | yLower > max' = noHit
+          | otherwise     = go max' (x' * max')
+          where
+            !q      = bestSoFar `quot` x'
+            !yLower = max x' (q + 1)
+            go !y !prod
+              | y < yLower       = noHit
+              | isPalindrome prod = prod
+              | otherwise        = go (y - 1) (prod - x')
+
 
 -- | Server protocol implementation
 runServer :: (Word32 -> Word32 -> Word32 -> (Word32, Word64)) -> IO ()

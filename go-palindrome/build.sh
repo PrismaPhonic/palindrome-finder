@@ -9,11 +9,11 @@ echo "Building Go palindrome binaries..."
 
 # Build smallest binary
 echo "Building palprod-go-smallest..."
-go build -ldflags="-s -w" -gcflags="all=-B -l=4" -o palprod-go-smallest ./cmd/palprod-go-smallest
+GOAMD64=v3 go build -ldflags="-s -w" -gcflags="all=-B -l=4" -o palprod-go-smallest ./cmd/palprod-go-smallest
 
 # Build largest binary  
 echo "Building palprod-go-largest..."
-go build -ldflags="-s -w" -gcflags="all=-B -l=4" -o palprod-go-largest ./cmd/palprod-go-largest
+GOAMD64=v3 go build -ldflags="-s -w" -gcflags="all=-B -l=4" -o palprod-go-largest ./cmd/palprod-go-largest
 
 # Copy to target-bin directory
 echo "Moving binaries to target-bin directory..."
