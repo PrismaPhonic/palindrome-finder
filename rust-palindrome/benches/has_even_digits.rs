@@ -3,10 +3,8 @@
 
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use palprod_rust::{
-    collect_factor_pairs, collect_factor_pairs_range,
     functional::{
-        collect_factor_pairs as collect_factor_pairs_functional, is_pal_functional,
-        largest_functional, largest_product_functional, smallest_functional,
+        is_pal_functional, largest_functional, largest_product_functional, smallest_functional,
         smallest_product_functional,
     },
     is_pal, largest, largest_product,
@@ -173,16 +171,15 @@ fn has_even_digits_ilog10(n: u32) -> bool {
 #[inline]
 fn has_even_digits_parity(n: u32) -> bool {
     debug_assert!(n > 0);
-    let mut parity: u32 = 0;
-    parity ^= (n >= 10) as u32;
-    parity ^= (n >= 100) as u32;
-    parity ^= (n >= 1_000) as u32;
-    parity ^= (n >= 10_000) as u32;
-    parity ^= (n >= 100_000) as u32;
-    parity ^= (n >= 1_000_000) as u32;
-    parity ^= (n >= 10_000_000) as u32;
-    parity ^= (n >= 100_000_000) as u32;
-    parity ^= (n >= 1_000_000_000) as u32;
+    let mut parity: u32 = 1;
+    let cmp_a = (n >= 100) as u32;
+    let cmp_b = (n >= 1_000) as u32;
+    let cmp_c = (n >= 10_000) as u32;
+    let cmp_d = (n >= 100_000) as u32;
+    parity ^= cmp_a;
+    parity ^= cmp_b;
+    parity ^= cmp_c;
+    parity ^= cmp_d;
     parity == 1
 }
 
@@ -196,6 +193,10 @@ fn palindrome_inputs() -> Vec<u32> {
     // Sample palindromes and non-palindromes across the same range.
     // Focus on the hot path: odd/even digit counts and trailing-zero rejection.
     (11..=999_999).collect()
+}
+
+fn nz(n: u32) -> NonZeroU32 {
+    NonZeroU32::new(n).unwrap()
 }
 
 fn factor_pair_inputs() -> Vec<(NonZeroU32, NonZeroU32, NonZeroU32)> {
@@ -341,13 +342,13 @@ fn bench_palindrome_checks(c: &mut Criterion) {
 }
 
 fn bench_largest_search_products(c: &mut Criterion) {
-    let expected = Some(906_609u32);
+    let expected = NonZeroU32::new(906_609u32).unwrap();
 
     if should_run("largest_product_iterative") {
         c.bench_function("largest_product_iterative_100_999", |b| {
             b.iter(|| {
-                let res = largest_product(black_box(100), black_box(999));
-                debug_assert_eq!(res, expected);
+                let res = largest_product(black_box(nz(100)), black_box(nz(999)));
+                debug_assert_eq!(res.unwrap().0, expected);
                 black_box(res)
             });
         });
@@ -357,7 +358,7 @@ fn bench_largest_search_products(c: &mut Criterion) {
         c.bench_function("largest_product_functional_100_999", |b| {
             b.iter(|| {
                 let res = largest_product_functional(black_box(100), black_box(999));
-                debug_assert_eq!(res, expected);
+                debug_assert_eq!(res.unwrap(), expected.get());
                 black_box(res)
             });
         });
@@ -367,7 +368,7 @@ fn bench_largest_search_products(c: &mut Criterion) {
         c.bench_function("largest_product_simd_100_999", |b| {
             b.iter(|| {
                 let res = largest_product_simd(black_box(100), black_box(999));
-                debug_assert_eq!(res, expected);
+                debug_assert_eq!(res.unwrap().0, expected.get());
                 black_box(res)
             });
         });
@@ -438,8 +439,8 @@ fn bench_smallest_search_products(c: &mut Criterion) {
     if should_run("smallest_product_iterative") {
         c.bench_function("smallest_product_iterative_910_999", |b| {
             b.iter(|| {
-                let res = smallest_product(black_box(910), black_box(999));
-                debug_assert_eq!(res, expected);
+                let res = smallest_product(black_box(nz(910)), black_box(nz(999)));
+                debug_assert_eq!(res.unwrap().0, nz(expected.unwrap()));
                 black_box(res)
             });
         });
@@ -459,7 +460,7 @@ fn bench_smallest_search_products(c: &mut Criterion) {
         c.bench_function("smallest_product_simd_910_999", |b| {
             b.iter(|| {
                 let res = smallest_product_simd(black_box(910), black_box(999));
-                debug_assert_eq!(res, expected);
+                debug_assert_eq!(res.unwrap().0, expected.unwrap());
                 black_box(res)
             });
         });
@@ -474,7 +475,7 @@ fn bench_smallest_product(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("smallest_product");
     group.bench_function("smallest_product_scalar", |b| {
-        b.iter(|| smallest_product(black_box(100u32), black_box(999u32)))
+        b.iter(|| smallest_product(black_box(nz(100u32)), black_box(nz(999u32))))
     });
     group.bench_function("smallest_product_simd", |b| {
         b.iter(|| smallest_product_simd(black_box(100u32), black_box(999u32)))
@@ -487,45 +488,6 @@ fn should_run(name: &str) -> bool {
         Ok(filter) if filter.is_empty() => true,
         Ok(filter) => name.contains(&filter),
         Err(_) => true,
-    }
-}
-
-fn bench_factor_pair_collection(c: &mut Criterion) {
-    let inputs = factor_pair_inputs();
-    assert!(
-        !inputs.is_empty(),
-        "factor pair input list should not be empty"
-    );
-
-    if should_run("collect_factor_pairs_iterative") {
-        c.bench_function("collect_factor_pairs_iterative", |b| {
-            b.iter(|| {
-                let mut acc = 0usize;
-                for &(product, min, max) in &inputs {
-                    let pairs =
-                        collect_factor_pairs(black_box(product), black_box(min), black_box(max));
-                    acc += pairs.len();
-                }
-                black_box(acc)
-            });
-        });
-    }
-
-    if should_run("collect_factor_pairs_functional") {
-        c.bench_function("collect_factor_pairs_functional", |b| {
-            b.iter(|| {
-                let mut acc = 0usize;
-                for &(product, min, max) in &inputs {
-                    let pairs = collect_factor_pairs_functional(
-                        black_box(product.get()),
-                        black_box(min.get()),
-                        black_box(max.get()),
-                    );
-                    acc += pairs.len();
-                }
-                black_box(acc)
-            });
-        });
     }
 }
 
@@ -598,7 +560,7 @@ criterion_group! {
         .sample_size(1000)
         .warm_up_time(Duration::from_millis(500))
         .measurement_time(Duration::from_secs(30));
-    targets = bench_has_even_digits, bench_palindrome_checks, bench_largest_search_products, bench_smallest_search_products, bench_factor_pair_collection, bench_smallest, bench_largest, bench_do_iters_overhead, bench_smallest_product
+    targets = bench_has_even_digits, bench_palindrome_checks, bench_largest_search_products, bench_smallest_search_products, bench_smallest, bench_largest, bench_do_iters_overhead, bench_smallest_product
 }
 
 criterion_main!(benches);

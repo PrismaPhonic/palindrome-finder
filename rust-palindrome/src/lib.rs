@@ -71,35 +71,19 @@ pub mod simd;
 // Palindrome helpers
 //
 
-/// Returns true if `n` has an even number of decimal digits.
-///
-/// Preconditions:
-/// - Call only with `n >= 11`. Callers should filter out `n < 10` and trailing-zero cases.
-///
-/// Rationale:
-/// We use this to apply the rule "even-length palindromes must be divisible by 11".
 #[inline(always)]
 fn has_even_digits(n: u32) -> bool {
-    debug_assert!(n >= 11);
-    if n < 100 {
-        true // 2 digits
-    } else if n < 1_000 {
-        false // 3 digits
-    } else if n < 10_000 {
-        true // 4 digits
-    } else if n < 100_000 {
-        false // 5 digits
-    } else if n < 1_000_000 {
-        true // 6 digits
-    } else if n < 10_000_000 {
-        false // 7 digits
-    } else if n < 100_000_000 {
-        true // 8 digits
-    } else if n < 1_000_000_000 {
-        false // 9 digits
-    } else {
-        true // 10 digits (max for u32)
-    }
+    debug_assert!(n >= 10);
+    let mut parity: u32 = 1;
+    let cmp_a = (n >= 100) as u32;
+    let cmp_b = (n >= 1_000) as u32;
+    let cmp_c = (n >= 10_000) as u32;
+    let cmp_d = (n >= 100_000) as u32;
+    parity ^= cmp_a;
+    parity ^= cmp_b;
+    parity ^= cmp_c;
+    parity ^= cmp_d;
+    parity == 1
 }
 
 /// Return true if `n` is a decimal palindrome (numeric half-reversal).
