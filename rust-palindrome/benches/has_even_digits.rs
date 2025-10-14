@@ -7,7 +7,7 @@ use palprod_rust::{
         is_pal_functional, largest_functional, largest_product_functional, smallest_functional,
         smallest_product_functional,
     },
-    is_pal, largest, largest_product,
+    has_even_digits, is_pal, largest, largest_product,
     simd::{
         is_pal_simd_mask, largest as largest_simd, largest_product as largest_product_simd,
         smallest as smallest_simd, smallest_product as smallest_product_simd,
@@ -79,36 +79,20 @@ define_pal_helper_odd!(pal_helper_3_digit, 1);
 define_pal_helper_even!(pal_helper_4_digit, 2);
 define_pal_helper_odd!(pal_helper_5_digit, 2);
 define_pal_helper_even!(pal_helper_6_digit, 3);
-define_pal_helper_odd!(pal_helper_7_digit, 3);
-define_pal_helper_even!(pal_helper_8_digit, 4);
-define_pal_helper_odd!(pal_helper_9_digit, 4);
-define_pal_helper_even!(pal_helper_10_digit, 5);
 
 #[inline(always)]
-fn digit_length_ge_10(n: u32) -> u32 {
+fn digits_length(n: u32) -> u32 {
     debug_assert!(n >= 10);
-    if n < 100 {
-        2
-    } else if n < 1_000 {
-        3
-    } else if n < 10_000 {
-        4
-    } else if n < 100_000 {
-        5
-    } else if n < 1_000_000 {
-        6
-    } else if n < 10_000_000 {
-        7
-    } else if n < 100_000_000 {
-        8
-    } else if n < 1_000_000_000 {
-        9
-    } else {
-        10
-    }
+    let cmp_a = (n >= 100) as u32;
+    let cmp_b = (n >= 1_000) as u32;
+    let cmp_c = (n >= 10_000) as u32;
+    let cmp_d = (n >= 100_000) as u32;
+    let t0 = cmp_a + cmp_b;
+    let t1 = cmp_c + cmp_d;
+    2 + t0 + t1
 }
 
-#[inline]
+#[inline(always)]
 fn is_pal_digit_dispatch(n: u32) -> bool {
     if n < 10 {
         return true;
@@ -117,7 +101,7 @@ fn is_pal_digit_dispatch(n: u32) -> bool {
         return false;
     }
 
-    let digits = digit_length_ge_10(n);
+    let digits = digits_length(n);
     if (digits & 1) == 0 && !n.is_multiple_of(11) {
         return false;
     }
@@ -128,15 +112,49 @@ fn is_pal_digit_dispatch(n: u32) -> bool {
         4 => pal_helper_4_digit(n),
         5 => pal_helper_5_digit(n),
         6 => pal_helper_6_digit(n),
-        7 => pal_helper_7_digit(n),
-        8 => pal_helper_8_digit(n),
-        9 => pal_helper_9_digit(n),
-        10 => pal_helper_10_digit(n),
         _ => false,
     }
 }
 
-#[inline]
+#[inline(always)]
+fn is_pal_loop_unrolled(n: u32) -> bool {
+    if n < 10 {
+        return true;
+    }
+    // Non-zero numbers ending in 0 cannot be palindromes.
+    if n.is_multiple_of(10) {
+        return false;
+    }
+
+    // Even-length palindromes must be divisible by 11.
+    if has_even_digits(n) && !n.is_multiple_of(11) {
+        return false;
+    }
+
+    pal_half_reverse_unrolled(n)
+}
+
+#[inline(always)]
+pub fn pal_half_reverse_unrolled(n: u32) -> bool {
+    let mut m = n / 10;
+    let mut rev = n % 10;
+    if m <= rev {
+        return m == rev || m == rev / 10;
+    }
+
+    rev = rev * 10 + (m % 10);
+    m /= 10;
+    if m <= rev {
+        return m == rev || m == rev / 10;
+    }
+
+    rev = rev * 10 + (m % 10);
+    m /= 10;
+
+    m == rev || m == rev / 10
+}
+
+#[inline(always)]
 fn has_even_digits_branch(n: u32) -> bool {
     debug_assert!(n >= 10);
     if n < 100 {
@@ -152,13 +170,13 @@ fn has_even_digits_branch(n: u32) -> bool {
     }
 }
 
-#[inline]
+#[inline(always)]
 fn has_even_digits_ilog10(n: u32) -> bool {
     debug_assert!(n >= 10);
     n.ilog10() & 1 == 1
 }
 
-#[inline]
+#[inline(always)]
 fn has_even_digits_parity(n: u32) -> bool {
     debug_assert!(n >= 10);
     let mut parity: u32 = 1;
@@ -173,6 +191,7 @@ fn has_even_digits_parity(n: u32) -> bool {
     parity == 1
 }
 
+#[inline(always)]
 pub fn has_even_digits_parity_new(n: u32) -> bool {
     // each cmp_* can execute in parallel; we combine once
     let cmp_a = (n >= 100) as u32;
@@ -193,8 +212,8 @@ fn input_numbers() -> Vec<u32> {
 
 fn palindrome_inputs() -> Vec<u32> {
     // Sample palindromes and non-palindromes across the same range.
-    // Focus on the hot path: odd/even digit counts and trailing-zero rejection.
-    (11..=999_999).collect()
+    // This covers our entire input from range of 2..999
+    (4..=998_001).collect()
 }
 
 fn nz(n: u32) -> NonZeroU32 {
@@ -348,6 +367,18 @@ fn bench_palindrome_checks(c: &mut Criterion) {
                 let mut acc = 0u32;
                 for &n in &inputs {
                     acc += is_pal_digit_dispatch(black_box(n)) as u32;
+                }
+                black_box(acc)
+            });
+        });
+    }
+
+    if should_run("is_pal_loop_unrolled") {
+        c.bench_function("is_pal_digit_loop_unrolled", |b| {
+            b.iter(|| {
+                let mut acc = 0u32;
+                for &n in &inputs {
+                    acc += is_pal_loop_unrolled(black_box(n)) as u32;
                 }
                 black_box(acc)
             });
