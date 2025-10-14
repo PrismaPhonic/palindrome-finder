@@ -72,17 +72,15 @@ pub mod simd;
 //
 
 #[inline(always)]
-fn has_even_digits(n: u32) -> bool {
+pub fn has_even_digits(n: u32) -> bool {
     debug_assert!(n >= 10);
-    let mut parity: u32 = 1;
     let cmp_a = (n >= 100) as u32;
     let cmp_b = (n >= 1_000) as u32;
     let cmp_c = (n >= 10_000) as u32;
     let cmp_d = (n >= 100_000) as u32;
-    parity ^= cmp_a;
-    parity ^= cmp_b;
-    parity ^= cmp_c;
-    parity ^= cmp_d;
+    let t0 = cmp_a ^ cmp_b;
+    let t1 = cmp_c ^ cmp_d;
+    let parity = 1 ^ (t0 ^ t1);
     parity == 1
 }
 
@@ -124,7 +122,6 @@ pub fn is_pal(n: u32) -> bool {
 
 #[inline(always)]
 const fn recip64(d: u32) -> u64 {
-    // ceil(2^64 / d) = floor((2^64 + d - 1) / d)
     // This is the standard 64-bit reciprocal for 32-bit divisors.
     (1u128 << 64).div_ceil(d as u128) as u64
 }
@@ -334,8 +331,8 @@ pub fn smallest_product(
 
         if y_upper >= x {
             let mut y = x;
+            let mut prod = x * y;
             loop {
-                let prod = x * y;
                 if is_pal(prod) {
                     best = prod;
                     pair = (x, y);
@@ -346,6 +343,7 @@ pub fn smallest_product(
                     break;
                 }
                 y += 1;
+                prod += x;
             }
         }
 
@@ -423,10 +421,10 @@ pub fn largest_product(
 
         if y_lower <= max {
             let mut y = max;
+            let mut prod = x * y;
             loop {
-                let p = x * y;
-                if is_pal(p) {
-                    best = p;
+                if is_pal(prod) {
+                    best = prod;
                     pair = (x, y);
                     break;
                 }
@@ -435,6 +433,7 @@ pub fn largest_product(
                     break;
                 }
                 y -= 1;
+                prod -= x;
             }
         }
 

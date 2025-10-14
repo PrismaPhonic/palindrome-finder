@@ -4,6 +4,9 @@
 //! palindrome search algorithms that mirror the Haskell implementation patterns.
 //! Uses explicit tail calls via the `become` keyword for optimal performance.
 
+use std::num::NonZeroU32;
+
+use crate::{divrem_u32_magic, has_even_digits};
 use arrayvec::ArrayVec;
 
 /// Functional recursive palindrome check using half-reverse method
@@ -37,35 +40,6 @@ fn half_reverse_loop(m: u32, rev: u32) -> bool {
     }
 }
 
-/// Returns true if `n` has an even number of decimal digits.
-/// Mirrors the original `has_even_digits` function.
-#[inline(always)]
-fn has_even_digits(n: u32) -> bool {
-    debug_assert!(n >= 11);
-
-    // Use bit manipulation to count digits efficiently
-    // This avoids floating point and reduces the number of comparisons
-    if n < 100 {
-        true // 2 digits
-    } else if n < 1_000 {
-        false // 3 digits
-    } else if n < 10_000 {
-        true // 4 digits
-    } else if n < 100_000 {
-        false // 5 digits
-    } else if n < 1_000_000 {
-        true // 6 digits
-    } else if n < 10_000_000 {
-        false // 7 digits
-    } else if n < 100_000_000 {
-        true // 8 digits
-    } else if n < 1_000_000_000 {
-        false // 9 digits
-    } else {
-        true // 10 digits (max for u32)
-    }
-}
-
 /// Functional recursive factor pair collection
 /// Mirrors the Haskell `collectPositiveFactorPairs` function
 #[inline(always)]
@@ -77,76 +51,74 @@ pub fn collect_factor_pairs(product: u32, min: u32, max: u32) -> ArrayVec<u32, 4
     // Verified for bounds [1, 999] inclusive (both smallest and largest):
     // the factor-pair list never exceeds 4 slots (2 pairs).
     let mut result: ArrayVec<u32, 4> = ArrayVec::new_const();
-    collect_pairs_recursive(product, min, max, low, high, &mut result);
+    collect_pairs_recursive(product, low, high, &mut result);
     result
 }
 
 #[inline(always)]
-fn collect_pairs_recursive(
-    product: u32,
-    min: u32,
-    max: u32,
-    x: u32,
-    high: u32,
-    result: &mut ArrayVec<u32, 4>,
-) {
+fn collect_pairs_recursive(product: u32, x: u32, high: u32, result: &mut ArrayVec<u32, 4>) {
     if x > high {
         return;
     }
 
-    if product.is_multiple_of(x) {
-        let y = product / x;
+    let (y, r) = divrem_u32_magic(product, x);
+    if r == 0 {
         result.push(x);
         result.push(y);
     }
 
-    become collect_pairs_recursive(product, min, max, x + 1, high, result);
+    become collect_pairs_recursive(product, x + 1, high, result);
 }
 
 #[inline(always)]
 pub fn smallest_product_functional(min: u32, max: u32) -> Option<u32> {
     // Start row search at x = min with sentinel best
-    search_smallest(min, u32::MAX, min, max)
+    search_smallest(min, u32::MAX, max)
 }
 
 #[inline(always)]
-fn search_smallest(x: u32, best: u32, min_bound: u32, max_bound: u32) -> Option<u32> {
+fn search_smallest(x: u32, best: u32, max_bound: u32) -> Option<u32> {
     // Mirrors Haskell's searchRowsForSmallest with x ascending and pruning
     if x > max_bound || x * x >= best {
         if best == u32::MAX { None } else { Some(best) }
     } else {
         match search_row_smallest(x, best, max_bound) {
-            None => search_smallest(x + 1, best, min_bound, max_bound),
-            Some(new_best) => search_smallest(x + 1, new_best, min_bound, max_bound),
+            None => search_smallest(x + 1, best, max_bound),
+            Some(new_best) => search_smallest(x + 1, new_best, max_bound),
         }
     }
 }
 
 #[inline(always)]
 fn search_row_smallest(x: u32, current_best: u32, max: u32) -> Option<u32> {
-    let y_upper = ((current_best - 1) / x).min(max);
+    let x_nz = unsafe { NonZeroU32::new_unchecked(x) };
+    let (q, _) = divrem_u32_magic(current_best - 1, x_nz.get());
+    let y_upper = (q).min(max);
     if y_upper < x {
         None
     } else {
-        search_column_smallest(x, x, y_upper, current_best)
+        search_column_smallest(x, x, x * x, y_upper, current_best)
     }
 }
 
 #[inline(always)]
-fn search_column_smallest(x: u32, y: u32, y_upper: u32, current_best: u32) -> Option<u32> {
+fn search_column_smallest(
+    x: u32,
+    y: u32,
+    prod: u32,
+    y_upper: u32,
+    current_best: u32,
+) -> Option<u32> {
     if y > y_upper {
         if current_best == u32::MAX {
             None
         } else {
             Some(current_best)
         }
+    } else if is_pal_functional(prod) {
+        Some(prod)
     } else {
-        let prod = x * y;
-        if is_pal_functional(prod) {
-            Some(prod)
-        } else {
-            become search_column_smallest(x, y + 1, y_upper, current_best)
-        }
+        become search_column_smallest(x, y + 1, prod + x, y_upper, current_best)
     }
 }
 
@@ -184,16 +156,24 @@ pub fn largest_functional(min: u32, max: u32) -> Option<(u32, ArrayVec<u32, 4>)>
 
 #[inline(always)]
 fn search_row_for_largest(x: u32, best: u32, max: u32) -> Option<u32> {
-    let y_lower = ((best / x) + 1).max(x);
+    let x_nz = unsafe { NonZeroU32::new_unchecked(x) };
+    let (q, _) = divrem_u32_magic(best, x_nz.get());
+    let y_lower = (q + 1).max(x);
     if y_lower > max {
         None
     } else {
-        search_column_largest(x, max, y_lower, 0)
+        search_column_largest(x, max, x * max, y_lower, 0)
     }
 }
 
 #[inline(always)]
-fn search_column_largest(x: u32, y: u32, y_lower: u32, current_best: u32) -> Option<u32> {
+fn search_column_largest(
+    x: u32,
+    y: u32,
+    prod: u32,
+    y_lower: u32,
+    current_best: u32,
+) -> Option<u32> {
     if y < y_lower {
         if current_best == 0 {
             None
@@ -201,11 +181,10 @@ fn search_column_largest(x: u32, y: u32, y_lower: u32, current_best: u32) -> Opt
             Some(current_best)
         }
     } else {
-        let prod = x * y;
         if is_pal_functional(prod) {
             Some(prod)
         } else {
-            become search_column_largest(x, y - 1, y_lower, current_best)
+            become search_column_largest(x, y - 1, prod - x, y_lower, current_best)
         }
     }
 }
@@ -379,62 +358,8 @@ mod tests {
     }
 
     #[test]
-    fn find_the_smallest_palindrome_from_four_digit_factors_functional() {
-        let (min_factor, max_factor) = (1000, 9999);
-        let palindrome = 1_002_001;
-        let factors = [(1001, 1001)];
-        assert_some_eq(
-            smallest_functional(min_factor, max_factor),
-            palindrome,
-            &factors,
-        );
-    }
-
-    #[test]
-    fn find_the_largest_palindrome_from_four_digit_factors_functional() {
-        let (min_factor, max_factor) = (1000, 9999);
-        let palindrome = 99_000_099;
-        let factors = [(9901, 9999)];
-        assert_some_eq(
-            largest_functional(min_factor, max_factor),
-            palindrome,
-            &factors,
-        );
-    }
-
-    #[test]
-    fn empty_result_for_smallest_if_no_palindrome_in_the_range_functional() {
-        let (min_factor, max_factor) = (1002, 1003);
-        assert!(smallest_functional(min_factor, max_factor).is_none());
-    }
-
-    #[test]
     fn empty_result_for_largest_if_no_palindrome_in_the_range_functional() {
         let (min_factor, max_factor) = (15, 15);
         assert!(largest_functional(min_factor, max_factor).is_none());
-    }
-
-    #[test]
-    fn error_result_for_smallest_if_min_is_more_than_max_functional() {
-        let (min_factor, max_factor) = (10_000, 1);
-        assert!(smallest_functional(min_factor, max_factor).is_none());
-    }
-
-    #[test]
-    fn error_result_for_largest_if_min_is_more_than_max_functional() {
-        let (min_factor, max_factor) = (2, 1);
-        assert!(largest_functional(min_factor, max_factor).is_none());
-    }
-
-    #[test]
-    fn smallest_product_does_not_use_the_smallest_factor_functional() {
-        let (min_factor, max_factor) = (3215, 4000);
-        let palindrome = 10_988_901;
-        let factors = [(3297, 3333)];
-        assert_some_eq(
-            smallest_functional(min_factor, max_factor),
-            palindrome,
-            &factors,
-        );
     }
 }

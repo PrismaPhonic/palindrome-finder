@@ -138,24 +138,14 @@ fn is_pal_digit_dispatch(n: u32) -> bool {
 
 #[inline]
 fn has_even_digits_branch(n: u32) -> bool {
-    debug_assert!(n > 0);
-    if n < 10 {
-        false
-    } else if n < 100 {
+    debug_assert!(n >= 10);
+    if n < 100 {
         true
     } else if n < 1_000 {
         false
     } else if n < 10_000 {
         true
     } else if n < 100_000 {
-        false
-    } else if n < 1_000_000 {
-        true
-    } else if n < 10_000_000 {
-        false
-    } else if n < 100_000_000 {
-        true
-    } else if n < 1_000_000_000 {
         false
     } else {
         true
@@ -164,13 +154,13 @@ fn has_even_digits_branch(n: u32) -> bool {
 
 #[inline]
 fn has_even_digits_ilog10(n: u32) -> bool {
-    debug_assert!(n > 0);
+    debug_assert!(n >= 10);
     n.ilog10() & 1 == 1
 }
 
 #[inline]
 fn has_even_digits_parity(n: u32) -> bool {
-    debug_assert!(n > 0);
+    debug_assert!(n >= 10);
     let mut parity: u32 = 1;
     let cmp_a = (n >= 100) as u32;
     let cmp_b = (n >= 1_000) as u32;
@@ -180,6 +170,18 @@ fn has_even_digits_parity(n: u32) -> bool {
     parity ^= cmp_b;
     parity ^= cmp_c;
     parity ^= cmp_d;
+    parity == 1
+}
+
+pub fn has_even_digits_parity_new(n: u32) -> bool {
+    // each cmp_* can execute in parallel; we combine once
+    let cmp_a = (n >= 100) as u32;
+    let cmp_b = (n >= 1_000) as u32;
+    let cmp_c = (n >= 10_000) as u32;
+    let cmp_d = (n >= 100_000) as u32;
+    let t0 = cmp_a ^ cmp_b;
+    let t1 = cmp_c ^ cmp_d;
+    let parity = 1 ^ (t0 ^ t1);
     parity == 1
 }
 
@@ -278,6 +280,18 @@ fn bench_has_even_digits(c: &mut Criterion) {
                 let mut acc = 0u32;
                 for &n in &inputs {
                     acc += has_even_digits_parity(black_box(n)) as u32;
+                }
+                black_box(acc)
+            });
+        });
+    }
+
+    if should_run("has_even_digits_parity_new") {
+        c.bench_function("has_even_digits_parity_new", |b| {
+            b.iter(|| {
+                let mut acc = 0u32;
+                for &n in &inputs {
+                    acc += has_even_digits_parity_new(black_box(n)) as u32;
                 }
                 black_box(acc)
             });
