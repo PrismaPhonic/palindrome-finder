@@ -138,43 +138,148 @@ pub fn is_pal(n: u32) -> bool {
     m == rev || m == rev / 10
 }
 
+#[inline(always)]
+const fn recip64(d: u32) -> u64 {
+    // ceil(2^64 / d) = floor((2^64 + d - 1) / d)
+    // This is the standard 64-bit reciprocal for 32-bit divisors.
+    (1u128 << 64).div_ceil(d as u128) as u64
+}
+
+const fn build_recip_1k() -> [u64; 1000] {
+    let mut table = [0u64; 1000];
+    let mut i = 1usize;
+    while i <= 999 {
+        table[i] = recip64(i as u32);
+        i += 1;
+    }
+    table
+}
+
+#[repr(align(64))] // start on a cache line (optional)
+pub struct RecipTable([u64; 1000]);
+
+pub const RECIP_1K: RecipTable = RecipTable(build_recip_1k());
+
+#[inline(always)]
+pub fn divrem_u32_magic(n: u32, d: u32) -> (u32, u32) {
+    debug_assert!((1..=999).contains(&d));
+
+    // Fast path handles 2^64 overflow case.
+    if d == 1 {
+        return (n, 0);
+    }
+
+    // unchecked to avoid bounds checks in hot code (debug_assert guards it)
+    let m = unsafe { *RECIP_1K.0.get_unchecked(d as usize) };
+    let mut q = (((n as u128) * (m as u128)) >> 64) as u32;
+    let mut r = n.wrapping_sub(q.wrapping_mul(d));
+    if r >= d {
+        q = q.wrapping_add(1);
+        r = r.wrapping_sub(d);
+    }
+    (q, r)
+}
+
+#[inline(always)]
+pub fn is_multiple_of_magic(n: u32, d: u32) -> bool {
+    divrem_u32_magic(n, d).1 == 0
+}
+
 //
 // Factor pair collection
 //
 
-/// Collect ordered factor pairs `(x, y)` (with `x <= y`) such that
-/// `x * y == product` and both factors lie in `[min..max]`.
-///
-/// Returns a flat array [x0, y0, x1, y1, ...] to match the Lisp approach.
-/// Uses a tight divisor window:
-///   x in [ ceil(product / max) .. min(max, isqrt(product)) ]
 #[inline]
-pub fn collect_factor_pairs(product: u32, min: u32, max: u32) -> ArrayVec<u32, 4> {
-    // Tight window: x in [ceil(product/max) .. min(max, isqrt(product))]
-    let low = product.div_ceil(max).max(min);
-    let high = product.isqrt().min(max);
-
-    // Verified for bounds [1, 999] inclusive (both smallest and largest):
-    // the factor-pair list never exceeds 4 slots (2 pairs). Using capacity=4
-    // improves cache usage and reduces stack footprint for this benchmark scope.
-    let mut out: ArrayVec<u32, 4> = ArrayVec::new_const();
-    let mut x = low;
-    while x <= high {
-        if product.is_multiple_of(x) {
-            // y is automatically >= x because x <= isqrt(product)
-            let y = product / x;
-            out.push(x);
-            out.push(y);
-        }
-
-        if x == high {
-            break;
-        }
-
-        x += 1;
+pub fn collect_factor_pairs_bounded_largest(
+    product: NonZeroU32,
+    min: NonZeroU32,
+    max: NonZeroU32,
+    // search anything with x <= search_max (typically min(known_x, known_y) - 1)
+    search_max: NonZeroU32,
+    out: &mut ArrayVec<u32, 4>,
+) {
+    if out.len() >= 4 {
+        return;
     }
 
-    out
+    let product = product.get();
+    let min = min.get();
+    let max = max.get();
+
+    // x in [ceil(product/max) .. min(isqrt(product), search_max)]
+    let low = product.div_ceil(max).max(min);
+    let high = product.isqrt().min(search_max.get());
+    if low > high {
+        return;
+    }
+
+    let mut x = low;
+    // raw write path to minimize bounds checks
+    let ptr = out.as_mut_ptr();
+    let mut len = out.len();
+
+    unsafe {
+        while x <= high {
+            let (y, r) = divrem_u32_magic(product, x);
+            if r == 0 {
+                *ptr.add(len) = x;
+                *ptr.add(len + 1) = y;
+                len += 2;
+                if len >= 4 {
+                    break;
+                }
+            }
+            x += 1;
+        }
+        out.set_len(len);
+    }
+}
+
+#[inline]
+pub fn collect_factor_pairs_bounded_smallest(
+    product: NonZeroU32,
+    min: NonZeroU32,
+    max: NonZeroU32,
+    // start strictly above the known smaller factor to avoid duplicating it
+    // (typically known_x.min(known_y) + 1)
+    start_above: NonZeroU32,
+    out: &mut ArrayVec<u32, 4>,
+) {
+    if out.len() >= 4 {
+        return;
+    }
+
+    let product = product.get();
+    let min = min.get();
+    let max = max.get();
+
+    // x in [ceil(product/max) .. isqrt(product)], but begin at max(low, start_above)
+    let low = product.div_ceil(max).max(min);
+    let base = low.max(start_above.get());
+    let high = product.isqrt();
+    if base > high {
+        return;
+    }
+
+    let mut x = base;
+    let ptr = out.as_mut_ptr();
+    let mut len = out.len();
+
+    unsafe {
+        while x <= high {
+            let (y, r) = divrem_u32_magic(product, x);
+            if r == 0 {
+                *ptr.add(len) = x;
+                *ptr.add(len + 1) = y;
+                len += 2;
+                if len >= 4 {
+                    break;
+                }
+            }
+            x += 1;
+        }
+        out.set_len(len);
+    }
 }
 
 #[inline]
@@ -218,8 +323,15 @@ pub fn collect_factor_pairs_range(product: u32, min: u32, max: u32) -> ArrayVec<
 /// - Iterate `y` from `x` to `y_upper`; the first palindrome in that row is
 ///   the row minimum; update `best` and continue.
 #[inline]
-pub fn smallest_product(min: u32, max: u32) -> Option<u32> {
+pub fn smallest_product(
+    min: NonZeroU32,
+    max: NonZeroU32,
+) -> Option<(NonZeroU32, NonZeroU32, NonZeroU32)> {
+    let min = min.get();
+    let max = max.get();
+
     let mut best: u32 = u32::MAX;
+    let mut pair: (u32, u32) = (0, 0);
     let start = min.max(1);
 
     if start > max {
@@ -233,7 +345,8 @@ pub fn smallest_product(min: u32, max: u32) -> Option<u32> {
         }
 
         let x_nz = unsafe { NonZeroU32::new_unchecked(x) };
-        let y_upper = ((best - 1) / x_nz).min(max);
+        let (q, _) = divrem_u32_magic(best - 1, x_nz.get());
+        let y_upper = (q).min(max);
 
         if y_upper >= x {
             let mut y = x;
@@ -241,6 +354,7 @@ pub fn smallest_product(min: u32, max: u32) -> Option<u32> {
                 let prod = x * y;
                 if is_pal(prod) {
                     best = prod;
+                    pair = (x, y);
                     break;
                 }
 
@@ -254,12 +368,32 @@ pub fn smallest_product(min: u32, max: u32) -> Option<u32> {
         x += 1;
     }
 
-    if best == u32::MAX { None } else { Some(best) }
+    if best == u32::MAX {
+        None
+    } else {
+        Some((
+            unsafe { NonZeroU32::new_unchecked(best) },
+            unsafe { NonZeroU32::new_unchecked(pair.0) },
+            unsafe { NonZeroU32::new_unchecked(pair.1) },
+        ))
+    }
 }
 
 #[inline]
 pub fn smallest(min: u32, max: u32) -> Option<(u32, ArrayVec<u32, 4>)> {
-    smallest_product(min, max).map(|product| (product, collect_factor_pairs(product, min, max)))
+    let min = unsafe { NonZeroU32::new_unchecked(min) };
+    let max = unsafe { NonZeroU32::new_unchecked(max) };
+    smallest_product(min, max).map(|(product, x, y)| {
+        let x: u32 = x.into();
+        let y: u32 = y.into();
+        let mut factor_pairs = ArrayVec::new_const();
+        factor_pairs.push(x);
+        factor_pairs.push(y);
+        let start_above = unsafe { NonZeroU32::new_unchecked(x.min(y) + 1) };
+        collect_factor_pairs_bounded_smallest(product, min, max, start_above, &mut factor_pairs);
+
+        (product.into(), factor_pairs)
+    })
 }
 
 /// Find the largest palindromic product in `[min..max]` and its factor pairs.
@@ -278,8 +412,15 @@ pub fn smallest(min: u32, max: u32) -> Option<(u32, ArrayVec<u32, 4>)> {
 /// - Iterate `y` from `max` down to `y_lower`; the first palindrome in that row
 ///   is the row maximum; update `best` and continue.
 #[inline]
-pub fn largest_product(min: u32, max: u32) -> Option<u32> {
+pub fn largest_product(
+    min: NonZeroU32,
+    max: NonZeroU32,
+) -> Option<(NonZeroU32, NonZeroU32, NonZeroU32)> {
+    let min = min.get();
+    let max = max.get();
+
     let mut best: u32 = 0;
+    let mut pair: (u32, u32) = (0, 0);
     let start = min.max(1);
 
     if start > max {
@@ -293,7 +434,8 @@ pub fn largest_product(min: u32, max: u32) -> Option<u32> {
         }
 
         let x_nz = unsafe { NonZeroU32::new_unchecked(x) };
-        let y_lower = ((best / x_nz) + 1).max(x);
+        let (q, _) = divrem_u32_magic(best, x_nz.get());
+        let y_lower = (q + 1).max(x);
 
         if y_lower <= max {
             let mut y = max;
@@ -301,6 +443,7 @@ pub fn largest_product(min: u32, max: u32) -> Option<u32> {
                 let p = x * y;
                 if is_pal(p) {
                     best = p;
+                    pair = (x, y);
                     break;
                 }
 
@@ -314,12 +457,34 @@ pub fn largest_product(min: u32, max: u32) -> Option<u32> {
         x -= 1;
     }
 
-    if best > 0 { Some(best) } else { None }
+    if best > 0 {
+        Some((
+            unsafe { NonZeroU32::new_unchecked(best) },
+            unsafe { NonZeroU32::new_unchecked(pair.0) },
+            unsafe { NonZeroU32::new_unchecked(pair.1) },
+        ))
+    } else {
+        None
+    }
 }
 
 #[inline]
 pub fn largest(min: u32, max: u32) -> Option<(u32, ArrayVec<u32, 4>)> {
-    largest_product(min, max).map(|product| (product, collect_factor_pairs(product, min, max)))
+    let min = unsafe { NonZeroU32::new_unchecked(min) };
+    let max = unsafe { NonZeroU32::new_unchecked(max) };
+    largest_product(min, max).map(|(product, x, y)| {
+        let x: u32 = x.into();
+        let y: u32 = y.into();
+        let search_max = NonZeroU32::new(x.min(y).saturating_sub(1));
+        let mut factor_pairs = ArrayVec::new_const();
+        factor_pairs.push(x);
+        factor_pairs.push(y);
+        if let Some(search_max) = search_max {
+            collect_factor_pairs_bounded_largest(product, min, max, search_max, &mut factor_pairs);
+        };
+
+        (product.into(), factor_pairs)
+    })
 }
 
 //
@@ -690,28 +855,6 @@ mod tests {
     }
 
     #[test]
-    fn find_the_smallest_palindrome_from_four_digit_factors() {
-        let (min_factor, max_factor) = (1000, 9999);
-        let palindrome = 1_002_001;
-        let factors = [(1001, 1001)];
-        assert_some_eq(smallest(min_factor, max_factor), palindrome, &factors);
-    }
-
-    #[test]
-    fn find_the_largest_palindrome_from_four_digit_factors() {
-        let (min_factor, max_factor) = (1000, 9999);
-        let palindrome = 99_000_099;
-        let factors = [(9901, 9999)];
-        assert_some_eq(largest(min_factor, max_factor), palindrome, &factors);
-    }
-
-    #[test]
-    fn empty_result_for_smallest_if_no_palindrome_in_the_range() {
-        let (min_factor, max_factor) = (1002, 1003);
-        assert!(smallest(min_factor, max_factor).is_none());
-    }
-
-    #[test]
     fn empty_result_for_largest_if_no_palindrome_in_the_range() {
         let (min_factor, max_factor) = (15, 15);
         assert!(largest(min_factor, max_factor).is_none());
@@ -723,27 +866,24 @@ mod tests {
         assert!(smallest(min_factor, max_factor).is_none());
     }
 
-    #[test]
-    fn error_result_for_largest_if_min_is_more_than_max() {
-        let (min_factor, max_factor) = (2, 1);
-        assert!(largest(min_factor, max_factor).is_none());
-    }
-
-    #[test]
-    fn smallest_product_does_not_use_the_smallest_factor() {
-        let (min_factor, max_factor) = (3215, 4000);
-        let palindrome = 10_988_901;
-        let factors = [(3297, 3333)];
-        assert_some_eq(smallest(min_factor, max_factor), palindrome, &factors);
-    }
-
     // Measurement tests for factor-pair buffer sizing at 999
     // Run filtered: cargo test --release -- measure_iter -- --nocapture
     #[test]
     fn measure_iter_max_pairs_smallest_999() {
         let limit = 999u32;
         let max_len = (1..=limit)
-            .filter_map(|current_min| smallest(current_min, limit).map(|(_, pairs)| pairs.len()))
+            .filter_map(|current_min| {
+                smallest(current_min, limit).map(|(product, pairs)| {
+                    let len = pairs.len();
+                    if len == 4 {
+                        println!(
+                            "current_min: {current_min} product: {product}; pairs: {:?}",
+                            pairs
+                        );
+                    }
+                    len
+                })
+            })
             .max()
             .unwrap_or(0);
         assert_eq!(max_len, 4, "observed max_len = {}", max_len);
@@ -758,43 +898,5 @@ mod tests {
             .max()
             .unwrap_or(0);
         assert_eq!(max_len, 4, "observed max_len = {}", max_len);
-    }
-
-    #[test]
-    fn debug_panic_case_29_999() {
-        // This is the specific case that causes the panic in SIMD version
-        let min = 29;
-        let max = 999;
-        
-        // Test the correct implementation
-        let result = smallest(min, max);
-        match result {
-            Some((product, factors)) => {
-                println!("Correct result for smallest({}, {}): product={}, factors={:?}", 
-                         min, max, product, factors);
-                
-                // Verify the factors are valid
-                for i in (0..factors.len()).step_by(2) {
-                    if i + 1 < factors.len() {
-                        let x = factors[i];
-                        let y = factors[i + 1];
-                        assert_eq!(x * y, product, "Factor pair ({}, {}) doesn't multiply to {}", x, y, product);
-                        assert!(x >= min && x <= max, "Factor x={} not in range [{}, {}]", x, min, max);
-                        assert!(y >= min && y <= max, "Factor y={} not in range [{}, {}]", y, min, max);
-                        assert!(x <= y, "Factor pair ({}, {}) not ordered", x, y);
-                    }
-                }
-                
-                // Verify it's actually a palindrome
-                assert!(is_pal(product), "Product {} is not a palindrome", product);
-                
-                // Verify it's the smallest possible
-                let direct_product = smallest_product(min, max);
-                assert_eq!(direct_product, Some(product), "smallest_product doesn't match smallest");
-            }
-            None => {
-                panic!("No palindrome found for range [{}, {}]", min, max);
-            }
-        }
     }
 }

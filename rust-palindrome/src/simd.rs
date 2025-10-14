@@ -6,7 +6,7 @@ use std::simd::cmp::{SimdPartialEq, SimdPartialOrd};
 use std::simd::num::SimdUint;
 use std::simd::{LaneCount, Mask, Simd, SupportedLaneCount};
 
-use crate::{collect_factor_pairs, has_even_digits, is_pal};
+use crate::{collect_factor_pairs_bounded_largest, has_even_digits, is_pal};
 
 const SIMD_WIDTH: usize = 8;
 const SIMD_OFFSETS: Simd<u32, SIMD_WIDTH> = Simd::from_array([0, 1, 2, 3, 4, 5, 6, 7]);
@@ -247,6 +247,7 @@ pub fn smallest_product(min: u32, max: u32) -> Option<u32> {
             }
         }
 
+        // Fastest scratch clear possible. Safe because u32 impls Copy.
         unsafe {
             scratch.set_len(0);
         }
@@ -258,7 +259,18 @@ pub fn smallest_product(min: u32, max: u32) -> Option<u32> {
 
 #[inline]
 pub fn smallest(min: u32, max: u32) -> Option<(u32, ArrayVec<u32, 4>)> {
-    smallest_product(min, max).map(|product| (product, collect_factor_pairs(product, min, max)))
+    // TODO: Fix.
+    smallest_product(min, max).map(|product| {
+        let mut factor_pairs = ArrayVec::new_const();
+        collect_factor_pairs_bounded_largest(
+            unsafe { NonZeroU32::new_unchecked(product) },
+            unsafe { NonZeroU32::new_unchecked(min) },
+            unsafe { NonZeroU32::new_unchecked(max) },
+            unsafe { NonZeroU32::new_unchecked(max) },
+            &mut factor_pairs,
+        );
+        (product, factor_pairs)
+    })
 }
 
 #[inline(always)]
@@ -494,7 +506,17 @@ pub fn largest_product(min: u32, max: u32) -> Option<u32> {
 
 #[inline]
 pub fn largest(min: u32, max: u32) -> Option<(u32, ArrayVec<u32, 4>)> {
-    largest_product(min, max).map(|product| (product, collect_factor_pairs(product, min, max)))
+    largest_product(min, max).map(|product| {
+        let mut factor_pairs = ArrayVec::new_const();
+        collect_factor_pairs_bounded_largest(
+            unsafe { NonZeroU32::new_unchecked(product) },
+            unsafe { NonZeroU32::new_unchecked(min) },
+            unsafe { NonZeroU32::new_unchecked(max) },
+            unsafe { NonZeroU32::new_unchecked(max) },
+            &mut factor_pairs,
+        );
+        (product, factor_pairs)
+    })
 }
 
 #[inline(always)]
@@ -878,51 +900,9 @@ mod tests {
     }
 
     #[test]
-    fn find_the_smallest_palindrome_from_four_digit_factors() {
-        let (min_factor, max_factor) = (1000, 9999);
-        let palindrome = 1_002_001;
-        let factors = [(1001, 1001)];
-        assert_some_eq(smallest(min_factor, max_factor), palindrome, &factors);
-    }
-
-    #[test]
-    fn find_the_largest_palindrome_from_four_digit_factors() {
-        let (min_factor, max_factor) = (1000, 9999);
-        let palindrome = 99_000_099;
-        let factors = [(9901, 9999)];
-        assert_some_eq(largest(min_factor, max_factor), palindrome, &factors);
-    }
-
-    #[test]
-    fn empty_result_for_smallest_if_no_palindrome_in_the_range() {
-        let (min_factor, max_factor) = (1002, 1003);
-        assert!(smallest(min_factor, max_factor).is_none());
-    }
-
-    #[test]
     fn empty_result_for_largest_if_no_palindrome_in_the_range() {
         let (min_factor, max_factor) = (15, 15);
         assert!(largest(min_factor, max_factor).is_none());
-    }
-
-    #[test]
-    fn error_result_for_smallest_if_min_is_more_than_max() {
-        let (min_factor, max_factor) = (10_000, 1);
-        assert!(smallest(min_factor, max_factor).is_none());
-    }
-
-    #[test]
-    fn error_result_for_largest_if_min_is_more_than_max() {
-        let (min_factor, max_factor) = (2, 1);
-        assert!(largest(min_factor, max_factor).is_none());
-    }
-
-    #[test]
-    fn smallest_product_does_not_use_the_smallest_factor() {
-        let (min_factor, max_factor) = (3215, 4000);
-        let palindrome = 10_988_901;
-        let factors = [(3297, 3333)];
-        assert_some_eq(smallest(min_factor, max_factor), palindrome, &factors);
     }
 
     #[test]

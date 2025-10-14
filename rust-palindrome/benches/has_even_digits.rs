@@ -16,6 +16,7 @@ use palprod_rust::{
     },
     smallest, smallest_product,
 };
+use std::num::NonZeroU32;
 use std::simd::Simd;
 use std::{env, time::Duration};
 
@@ -197,7 +198,7 @@ fn palindrome_inputs() -> Vec<u32> {
     (11..=999_999).collect()
 }
 
-fn factor_pair_inputs() -> Vec<(u32, u32, u32)> {
+fn factor_pair_inputs() -> Vec<(NonZeroU32, NonZeroU32, NonZeroU32)> {
     let ranges = [
         (1, 9),
         (10, 99),
@@ -223,7 +224,7 @@ fn factor_pair_inputs() -> Vec<(u32, u32, u32)> {
     }
 
     if samples.is_empty() {
-        return samples;
+        return Vec::new();
     }
 
     let base = samples.clone();
@@ -232,6 +233,15 @@ fn factor_pair_inputs() -> Vec<(u32, u32, u32)> {
     }
 
     samples
+        .into_iter()
+        .map(|(a, b, c)| {
+            (
+                NonZeroU32::new(a).unwrap(),
+                NonZeroU32::new(b).unwrap(),
+                NonZeroU32::new(c).unwrap(),
+            )
+        })
+        .collect()
 }
 
 fn bench_has_even_digits(c: &mut Criterion) {
@@ -501,32 +511,15 @@ fn bench_factor_pair_collection(c: &mut Criterion) {
         });
     }
 
-    if should_run("collect_factor_pairs_range") {
-        c.bench_function("collect_factor_pairs_range", |b| {
-            b.iter(|| {
-                let mut acc = 0usize;
-                for &(product, min, max) in &inputs {
-                    let pairs = collect_factor_pairs_range(
-                        black_box(product),
-                        black_box(min),
-                        black_box(max),
-                    );
-                    acc += pairs.len();
-                }
-                black_box(acc)
-            });
-        });
-    }
-
     if should_run("collect_factor_pairs_functional") {
         c.bench_function("collect_factor_pairs_functional", |b| {
             b.iter(|| {
                 let mut acc = 0usize;
                 for &(product, min, max) in &inputs {
                     let pairs = collect_factor_pairs_functional(
-                        black_box(product),
-                        black_box(min),
-                        black_box(max),
+                        black_box(product.get()),
+                        black_box(min.get()),
+                        black_box(max.get()),
                     );
                     acc += pairs.len();
                 }
