@@ -6,7 +6,10 @@ use std::simd::cmp::{SimdPartialEq, SimdPartialOrd};
 use std::simd::num::SimdUint;
 use std::simd::{LaneCount, Mask, Simd, SupportedLaneCount};
 
-use crate::{collect_factor_pairs_bounded_largest, has_even_digits, is_pal};
+use crate::{
+    collect_factor_pairs_bounded_largest, collect_factor_pairs_bounded_smallest, divrem_u32_magic,
+    has_even_digits, is_pal,
+};
 
 const SIMD_WIDTH: usize = 8;
 const SIMD_OFFSETS: Simd<u32, SIMD_WIDTH> = Simd::from_array([0, 1, 2, 3, 4, 5, 6, 7]);
@@ -166,8 +169,9 @@ where
 //
 
 #[inline]
-pub fn smallest_product(min: u32, max: u32) -> Option<u32> {
+pub fn smallest_product(min: u32, max: u32) -> Option<(u32, u32, u32)> {
     let mut best: u32 = u32::MAX;
+    let mut best_x: u32 = 0;
     let start = min.max(1);
 
     let ten = Simd::splat(10);
@@ -179,7 +183,8 @@ pub fn smallest_product(min: u32, max: u32) -> Option<u32> {
         }
 
         let x_nz = unsafe { NonZeroU32::new_unchecked(x) };
-        let y_upper = ((best - 1) / x_nz).min(max);
+        let (q, _) = divrem_u32_magic(best - 1, x_nz.get());
+        let y_upper = q.min(max);
 
         if y_upper < x {
             x += 1;
@@ -205,6 +210,7 @@ pub fn smallest_product(min: u32, max: u32) -> Option<u32> {
                     (Some(row_best), _) => {
                         if row_best < best {
                             best = row_best;
+                            best_x = x;
                         }
                         break;
                     }
@@ -217,6 +223,7 @@ pub fn smallest_product(min: u32, max: u32) -> Option<u32> {
                 {
                     if row_best < best {
                         best = row_best;
+                        best_x = x;
                     }
                     break;
                 }
@@ -228,6 +235,7 @@ pub fn smallest_product(min: u32, max: u32) -> Option<u32> {
                 {
                     if row_best < best {
                         best = row_best;
+                        best_x = x;
                     }
                     break;
                 }
@@ -238,8 +246,10 @@ pub fn smallest_product(min: u32, max: u32) -> Option<u32> {
                     && row_best < best
                 {
                     best = row_best;
+                    best_x = x;
                 } else if is_pal(prod) && prod < best {
                     best = prod;
+                    best_x = x;
                 }
 
                 // Out of options at this point anyways, so break
@@ -254,19 +264,26 @@ pub fn smallest_product(min: u32, max: u32) -> Option<u32> {
         x += 1;
     }
 
-    if best == u32::MAX { None } else { Some(best) }
+    if best == u32::MAX { 
+        None 
+    } else { 
+        let (y, _) = divrem_u32_magic(best, best_x);
+        Some((best, best_x, y))
+    }
 }
 
 #[inline]
 pub fn smallest(min: u32, max: u32) -> Option<(u32, ArrayVec<u32, 4>)> {
-    // TODO: Fix.
-    smallest_product(min, max).map(|product| {
+    smallest_product(min, max).map(|(product, x, y)| {
         let mut factor_pairs = ArrayVec::new_const();
-        collect_factor_pairs_bounded_largest(
+        factor_pairs.push(x);
+        factor_pairs.push(y);
+        let start_above = unsafe { NonZeroU32::new_unchecked(x.min(y) + 1) };
+        collect_factor_pairs_bounded_smallest(
             unsafe { NonZeroU32::new_unchecked(product) },
             unsafe { NonZeroU32::new_unchecked(min) },
             unsafe { NonZeroU32::new_unchecked(max) },
-            unsafe { NonZeroU32::new_unchecked(max) },
+            start_above,
             &mut factor_pairs,
         );
         (product, factor_pairs)
@@ -413,8 +430,9 @@ where
 }
 
 #[inline]
-pub fn largest_product(min: u32, max: u32) -> Option<u32> {
+pub fn largest_product(min: u32, max: u32) -> Option<(u32, u32, u32)> {
     let mut best: u32 = 0;
+    let mut best_x: u32 = 0;
     let start = min.max(1);
 
     let ten = Simd::splat(10);
@@ -426,7 +444,8 @@ pub fn largest_product(min: u32, max: u32) -> Option<u32> {
         }
 
         let x_nz = unsafe { NonZeroU32::new_unchecked(x) };
-        let y_lower = ((best / x_nz) + 1).max(x);
+        let (q, _) = divrem_u32_magic(best, x_nz.get());
+        let y_lower = (q + 1).max(x);
 
         if y_lower > max {
             x += 1;
@@ -452,6 +471,7 @@ pub fn largest_product(min: u32, max: u32) -> Option<u32> {
                     (Some(row_best), _) => {
                         if row_best > best {
                             best = row_best;
+                            best_x = x;
                         }
                         break;
                     }
@@ -464,6 +484,7 @@ pub fn largest_product(min: u32, max: u32) -> Option<u32> {
                 {
                     if row_best > best {
                         best = row_best;
+                        best_x = x;
                     }
                     break;
                 }
@@ -475,6 +496,7 @@ pub fn largest_product(min: u32, max: u32) -> Option<u32> {
                 {
                     if row_best > best {
                         best = row_best;
+                        best_x = x;
                     }
                     break;
                 }
@@ -485,8 +507,10 @@ pub fn largest_product(min: u32, max: u32) -> Option<u32> {
                     && row_best > best
                 {
                     best = row_best;
+                    best_x = x;
                 } else if is_pal(prod) && prod > best {
                     best = prod;
+                    best_x = x;
                 }
 
                 // Out of options at this point anyways, so break
@@ -501,20 +525,30 @@ pub fn largest_product(min: u32, max: u32) -> Option<u32> {
         x -= 1;
     }
 
-    if best > 0 { Some(best) } else { None }
+    if best > 0 { 
+        let (y, _) = divrem_u32_magic(best, best_x);
+        Some((best, best_x, y))
+    } else { 
+        None 
+    }
 }
 
 #[inline]
 pub fn largest(min: u32, max: u32) -> Option<(u32, ArrayVec<u32, 4>)> {
-    largest_product(min, max).map(|product| {
+    largest_product(min, max).map(|(product, x, y)| {
+        let search_max = NonZeroU32::new(x.min(y).saturating_sub(1));
         let mut factor_pairs = ArrayVec::new_const();
-        collect_factor_pairs_bounded_largest(
-            unsafe { NonZeroU32::new_unchecked(product) },
-            unsafe { NonZeroU32::new_unchecked(min) },
-            unsafe { NonZeroU32::new_unchecked(max) },
-            unsafe { NonZeroU32::new_unchecked(max) },
-            &mut factor_pairs,
-        );
+        factor_pairs.push(x);
+        factor_pairs.push(y);
+        if let Some(search_max) = search_max {
+            collect_factor_pairs_bounded_largest(
+                unsafe { NonZeroU32::new_unchecked(product) },
+                unsafe { NonZeroU32::new_unchecked(min) },
+                unsafe { NonZeroU32::new_unchecked(max) },
+                search_max,
+                &mut factor_pairs,
+            );
+        }
         (product, factor_pairs)
     })
 }
