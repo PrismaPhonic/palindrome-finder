@@ -283,19 +283,21 @@ All runners implement the same minimal line protocol and assume strictly correct
 
 Latest average times per iteration for largest:
 
-| Implementation               |  Range | Task     | Time      |
-|------------------------------+--------+----------+-----------|
-| Rust                         | 2..999 | largest  | 1.4033 µs |
-| Rust Functional              | 2..999 | largest  | 1.4891 µs |
-| Haskell                      | 2..999 | largest  | 1.4998 µs |
-| Rust (PGO + Bolt)            | 2..999 | largest  | 1.5073 µs |
-| Rust Functional (PGO + Bolt) | 2..999 | largest  | 1.5204 µs |
-| Rust Simd                    | 2..999 | largest  | 1.9310 µs |
-| Rust Simd (PGO + Bolt)       | 2..999 | largest  | 1.9585 µs |
-| Golang (PGO)                 | 2..999 | largest  | 2.1527 µs |
-| Golang                       | 2..999 | largest  | 2.1576 µs |
-| Common Lisp                  | 2..999 | largest  | 2.2169 µs |
-| Coalton                      | 2..999 | largest  | 2.5700 µs |
+| Implementation               |  Range | Task    | Time      |
+|------------------------------+--------+---------+-----------|
+| Rust                         | 2..999 | largest | 1.4033 µs |
+| Rust Functional              | 2..999 | largest | 1.4891 µs |
+| Haskell                      | 2..999 | largest | 1.4998 µs |
+| Rust (PGO + Bolt)            | 2..999 | largest | 1.5073 µs |
+| Rust Functional (PGO + Bolt) | 2..999 | largest | 1.5204 µs |
+| Rust Simd                    | 2..999 | largest | 1.9310 µs |
+| Rust Simd (PGO + Bolt)       | 2..999 | largest | 1.9585 µs |
+| Golang (PGO)                 | 2..999 | largest | 2.1527 µs |
+| Golang                       | 2..999 | largest | 2.1576 µs |
+| Common Lisp                  | 2..999 | largest | 2.2169 µs |
+| Coalton                      | 2..999 | largest | 2.5700 µs |
+| Python (PyPy)                | 2..999 | largest | 5.1930 µs |
+| Python (CPython)             | 2..999 | largest | 113.77 µs |
 
 Latest average times per iteration for smallest
 
@@ -312,6 +314,8 @@ Latest average times per iteration for smallest
 | Common Lisp                  | 2..999 | smallest | 3.0984 µs |
 | Golang                       | 2..999 | smallest | 3.1503 µs |
 | Coalton                      | 2..999 | smallest | 3.6000 µs |
+| Python (PyPy)                | 2..999 | smallest | 10.989 µs |
+| Python (CPython)             | 2..999 | smallest | 228.37 µs |
 
 * Rust functional implementation
 

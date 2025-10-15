@@ -63,20 +63,20 @@ impl Runner {
         self.send(&format!("WARMUP {actual}"));
         assert!(self.read_line().starts_with("OK"));
     }
-    fn run(&mut self, requested_iters: u64) -> (i64, u64) {
+    fn run(&mut self, requested_iters: u64) -> (i64, u128) {
         let (actual_iters, scaled_iters) = self.adjust_iters(requested_iters.max(1));
         self.send(&format!("RUN {actual_iters}"));
         let line = self.read_line();
         let parts: Vec<_> = line.split_whitespace().collect();
         assert!(parts.len() >= 4 && parts[0] == "OK");
         let product = parts[1].parse::<i64>().unwrap();
-        let nanos = parts[3].parse::<u64>().unwrap();
+        let nanos = parts[3].parse::<u128>().unwrap();
         let scaled = if actual_iters == scaled_iters {
             nanos
         } else {
-            let numerator = (nanos as u128) * (scaled_iters as u128);
+            let numerator = nanos * (scaled_iters as u128);
             let denominator = actual_iters as u128;
-            ((numerator + denominator / 2) / denominator) as u64
+            (numerator + denominator / 2) / denominator
         };
         (product, scaled)
     }
@@ -119,12 +119,14 @@ fn bench_servered(c: &mut Criterion, name: &str, bin: &str, min: i32, max: i32) 
     r.init(min, max);
 
     // optional short pre-prime (page cache / JITs); not measured
-    r.warmup(500_000);
+    r.warmup(50_000);
 
     c.bench_function(name, |b| {
         b.iter_custom(|iters| {
             let (_, nanos) = r.run(iters);
-            Duration::from_nanos(nanos)
+            let seconds = (nanos / 1_000_000_000) as u64;
+            let nanos_remainder = (nanos % 1_000_000_000) as u32;
+            Duration::new(seconds, nanos_remainder)
         })
     });
 }
@@ -152,6 +154,16 @@ pub fn benches(c: &mut Criterion) {
     let haskell_sm = "../target-bin/palprod-haskell-smallest";
     let coalton_lg = "../target-bin/palprod-coalton-largest";
     let coalton_sm = "../target-bin/palprod-coalton-smallest";
+    let python_lg = "../target-bin/palprod-python-largest";
+    let python_sm = "../target-bin/palprod-python-smallest";
+    let pypy_lg = "../target-bin/palprod-pypy-largest";
+    let pypy_sm = "../target-bin/palprod-pypy-smallest";
+
+    bench_servered(c, "Python largest 2..999", python_lg, 2, 999);
+    bench_servered(c, "Python smallest 2..999", python_sm, 2, 999);
+
+    bench_servered(c, "PyPy largest 2..999", pypy_lg, 2, 999);
+    bench_servered(c, "PyPy smallest 2..999", pypy_sm, 2, 999);
 
     bench_servered(c, "RUST               largest 2..999", rust_lg, 2, 999);
     bench_servered(c, "RUST               smallest 2..999", rust_sm, 2, 999);

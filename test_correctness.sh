@@ -1,11 +1,11 @@
 #!/bin/bash
 
 echo "Testing correctness of all palindrome servers..."
-echo "Range: 1-999, Iterations: 10000"
+echo "Range: 2-999, Iterations: 10000"
 echo "=================================="
 
 # Test parameters
-MIN_VAL=1
+MIN_VAL=2
 MAX_VAL=999
 ITERS=10000
 
@@ -59,6 +59,16 @@ result=$(test_server "Fast" "./target-bin/palprod-fast-smallest-inner" "smallest
 echo "Fast        | $result"
 smallest_results+=("Fast:$result")
 
+# Test Python smallest
+result=$(test_server "Python" "./target-bin/palprod-python-smallest" "smallest")
+echo "Python      | $result"
+smallest_results+=("Python:$result")
+
+# Test PyPy smallest
+result=$(test_server "PyPy" "./target-bin/palprod-pypy-smallest" "smallest")
+echo "PyPy        | $result"
+smallest_results+=("PyPy:$result")
+
 # Test largest servers
 echo ""
 echo "=== LARGEST SERVERS ==="
@@ -92,6 +102,16 @@ result=$(test_server "Fast" "./target-bin/palprod-fast-largest-inner" "largest")
 echo "Fast        | $result"
 largest_results+=("Fast:$result")
 
+# Test Python largest
+result=$(test_server "Python" "./target-bin/palprod-python-largest" "largest")
+echo "Python      | $result"
+largest_results+=("Python:$result")
+
+# Test PyPy largest
+result=$(test_server "PyPy" "./target-bin/palprod-pypy-largest" "largest")
+echo "PyPy        | $result"
+largest_results+=("PyPy:$result")
+
 # Analyze results
 echo ""
 echo "=== CORRECTNESS ANALYSIS ==="
@@ -103,8 +123,8 @@ smallest_accumulators=()
 
 for result in "${smallest_results[@]}"; do
     IFS=':' read -r name data <<< "$result"
-    # Parse "OK product accumulator" format
-    if [[ "$data" =~ ^OK[[:space:]]+([0-9]+)[[:space:]]+([0-9]+)$ ]]; then
+    # Parse "OK product accumulator nanoseconds" format
+    if [[ "$data" =~ ^OK[[:space:]]+([0-9]+)[[:space:]]+([0-9]+)[[:space:]]+([0-9]+)$ ]]; then
         product="${BASH_REMATCH[1]}"
         accumulator="${BASH_REMATCH[2]}"
         smallest_products+=("$product")
@@ -142,8 +162,8 @@ largest_accumulators=()
 
 for result in "${largest_results[@]}"; do
     IFS=':' read -r name data <<< "$result"
-    # Parse "OK product accumulator" format
-    if [[ "$data" =~ ^OK[[:space:]]+([0-9]+)[[:space:]]+([0-9]+)$ ]]; then
+    # Parse "OK product accumulator nanoseconds" format
+    if [[ "$data" =~ ^OK[[:space:]]+([0-9]+)[[:space:]]+([0-9]+)[[:space:]]+([0-9]+)$ ]]; then
         product="${BASH_REMATCH[1]}"
         accumulator="${BASH_REMATCH[2]}"
         largest_products+=("$product")
