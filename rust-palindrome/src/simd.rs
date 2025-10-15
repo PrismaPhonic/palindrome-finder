@@ -208,10 +208,8 @@ pub fn smallest_product(min: u32, max: u32) -> Option<(u32, u32, u32)> {
                     &mut scratch,
                 ) {
                     (Some(row_best), _) => {
-                        if row_best < best {
-                            best = row_best;
-                            best_x = x;
-                        }
+                        best = row_best;
+                        best_x = x;
                         break;
                     }
                     (_, next_base) => y_base = next_base,
@@ -221,10 +219,8 @@ pub fn smallest_product(min: u32, max: u32) -> Option<(u32, u32, u32)> {
                 if let Some(row_best) =
                     process_palindrome_candidates(prod_vec, Simd::splat(10), &mut scratch)
                 {
-                    if row_best < best {
-                        best = row_best;
-                        best_x = x;
-                    }
+                    best = row_best;
+                    best_x = x;
                     break;
                 }
                 y_base += 4;
@@ -233,21 +229,17 @@ pub fn smallest_product(min: u32, max: u32) -> Option<(u32, u32, u32)> {
                 if let Some(row_best) =
                     process_palindrome_candidates(prod_vec, Simd::splat(10), &mut scratch)
                 {
-                    if row_best < best {
-                        best = row_best;
-                        best_x = x;
-                    }
+                    best = row_best;
+                    best_x = x;
                     break;
                 }
                 y_base += 2;
             } else {
                 let prod = x * y_upper;
-                if let Some(row_best) = process_compact_until_done_ptr(&scratch)
-                    && row_best < best
-                {
+                if let Some(row_best) = process_compact_until_done_ptr(&scratch) {
                     best = row_best;
                     best_x = x;
-                } else if is_pal(prod) && prod < best {
+                } else if is_pal(prod) {
                     best = prod;
                     best_x = x;
                 }
@@ -469,10 +461,8 @@ pub fn largest_product(min: u32, max: u32) -> Option<(u32, u32, u32)> {
                     &mut scratch,
                 ) {
                     (Some(row_best), _) => {
-                        if row_best > best {
-                            best = row_best;
-                            best_x = x;
-                        }
+                        best = row_best;
+                        best_x = x;
                         break;
                     }
                     (_, next_head) => y_head = next_head,
@@ -482,10 +472,8 @@ pub fn largest_product(min: u32, max: u32) -> Option<(u32, u32, u32)> {
                 if let Some(row_best) =
                     process_palindrome_candidates(prod_vec, Simd::splat(10), &mut scratch)
                 {
-                    if row_best > best {
-                        best = row_best;
-                        best_x = x;
-                    }
+                    best = row_best;
+                    best_x = x;
                     break;
                 }
                 y_head -= 4;
@@ -494,21 +482,17 @@ pub fn largest_product(min: u32, max: u32) -> Option<(u32, u32, u32)> {
                 if let Some(row_best) =
                     process_palindrome_candidates(prod_vec, Simd::splat(10), &mut scratch)
                 {
-                    if row_best > best {
-                        best = row_best;
-                        best_x = x;
-                    }
+                    best = row_best;
+                    best_x = x;
                     break;
                 }
                 y_head -= 2;
             } else {
                 let prod = x * y_lower;
-                if let Some(row_best) = process_compact_until_done_ptr(&scratch)
-                    && row_best > best
-                {
+                if let Some(row_best) = process_compact_until_done_ptr(&scratch) {
                     best = row_best;
                     best_x = x;
-                } else if is_pal(prod) && prod > best {
+                } else if is_pal(prod) {
                     best = prod;
                     best_x = x;
                 }

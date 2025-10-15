@@ -14,8 +14,8 @@ use palprod_rust::{
     },
     smallest, smallest_product,
 };
-use std::num::NonZeroU32;
 use std::simd::Simd;
+use std::{collections::HashSet, num::NonZeroU32};
 use std::{env, time::Duration};
 
 const SIMD_BATCH: usize = 8;
@@ -155,6 +155,33 @@ pub fn pal_half_reverse_unrolled(n: u32) -> bool {
 }
 
 #[inline(always)]
+pub fn is_pal_flipped(n: u32) -> bool {
+    // if n < 10 {
+    //     return true;
+    // }
+
+    // // Even-length palindromes must be divisible by 11.
+    // if has_even_digits(n) && !n.is_multiple_of(11) {
+    //     return false;
+    // }
+
+    // Non-zero numbers ending in 0 cannot be palindromes.
+    if n.is_multiple_of(10) {
+        return false;
+    }
+
+    // Half-reverse
+    let mut m = n;
+    let mut rev: u32 = 0;
+    while m > rev {
+        rev = rev * 10 + m % 10;
+        m /= 10;
+    }
+
+    m == rev || m == rev / 10
+}
+
+#[inline(always)]
 fn has_even_digits_branch(n: u32) -> bool {
     debug_assert!(n >= 10);
     if n < 100 {
@@ -213,7 +240,12 @@ fn input_numbers() -> Vec<u32> {
 fn palindrome_inputs() -> Vec<u32> {
     // Sample palindromes and non-palindromes across the same range.
     // This covers our entire input from range of 2..999
-    (4..=998_001).collect()
+    let set: HashSet<u32> = (2u32..=999)
+        .flat_map(|a| (2u32..=999).map(move |b| a * b))
+        .collect();
+    let mut vec: Vec<u32> = set.into_iter().collect();
+    vec.sort();
+    vec
 }
 
 fn nz(n: u32) -> NonZeroU32 {
@@ -327,6 +359,18 @@ fn bench_palindrome_checks(c: &mut Criterion) {
                 let mut acc = 0u32;
                 for &n in &inputs {
                     acc += is_pal(black_box(n)) as u32;
+                }
+                black_box(acc)
+            });
+        });
+    }
+
+    if should_run("is_pal_flipped") {
+        c.bench_function("is_pal_flipped", |b| {
+            b.iter(|| {
+                let mut acc = 0u32;
+                for &n in &inputs {
+                    acc += is_pal_flipped(black_box(n)) as u32;
                 }
                 black_box(acc)
             });
