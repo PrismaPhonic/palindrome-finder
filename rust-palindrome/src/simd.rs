@@ -8,7 +8,7 @@ use std::simd::{LaneCount, Mask, Simd, SupportedLaneCount};
 
 use crate::{
     collect_factor_pairs_bounded_largest, collect_factor_pairs_bounded_smallest, divrem_u32_magic,
-    has_even_digits, is_pal,
+    is_pal,
 };
 
 const SIMD_WIDTH: usize = 8;
@@ -109,10 +109,9 @@ where
     let cmp_b = n.simd_ge(thousand_threshold());
     let cmp_c = n.simd_ge(ten_thousand_threshold());
     let cmp_d = n.simd_ge(hundred_thousand_threshold());
-    parity ^= cmp_a;
-    parity ^= cmp_b;
-    parity ^= cmp_c;
-    parity ^= cmp_d;
+    let t0 = cmp_a ^ cmp_b;
+    let t1 = cmp_c ^ cmp_d;
+    parity ^= t0 ^ t1;
     parity
 }
 
@@ -256,9 +255,9 @@ pub fn smallest_product(min: u32, max: u32) -> Option<(u32, u32, u32)> {
         x += 1;
     }
 
-    if best == u32::MAX { 
-        None 
-    } else { 
+    if best == u32::MAX {
+        None
+    } else {
         let (y, _) = divrem_u32_magic(best, best_x);
         Some((best, best_x, y))
     }
@@ -509,15 +508,15 @@ pub fn largest_product(min: u32, max: u32) -> Option<(u32, u32, u32)> {
         x -= 1;
     }
 
-    if best > 0 { 
+    if best > 0 {
         let (y, _) = divrem_u32_magic(best, best_x);
         Some((best, best_x, y))
-    } else { 
-        None 
+    } else {
+        None
     }
 }
 
-#[inline]
+#[inline(never)]
 pub fn largest(min: u32, max: u32) -> Option<(u32, ArrayVec<u32, 4>)> {
     largest_product(min, max).map(|(product, x, y)| {
         let search_max = NonZeroU32::new(x.min(y).saturating_sub(1));
@@ -547,49 +546,6 @@ pub fn is_pal_half_reverse(n: u32) -> bool {
     }
 
     m == rev || m == rev / 10
-}
-
-#[inline(always)]
-fn process_compact_until_done(values: &[u32]) -> Option<u32> {
-    let mut offset = 0;
-    let len = values.len();
-
-    while offset < len {
-        let remaining = len - offset;
-        if remaining >= 8 {
-            let vec = Simd::<u32, 8>::from_slice(&values[offset..offset + 8]);
-            let mask = is_pal_simd_mask_generic(vec);
-            if mask.any() {
-                let lane = mask.to_bitmask().trailing_zeros() as usize;
-                return Some(vec[lane]);
-            }
-            offset += 8;
-        } else if remaining >= 4 {
-            let vec = Simd::<u32, 4>::from_slice(&values[offset..offset + 4]);
-            let mask = is_pal_simd_mask_generic(vec);
-            if mask.any() {
-                let lane = mask.to_bitmask().trailing_zeros() as usize;
-                return Some(vec[lane]);
-            }
-            offset += 4;
-        } else if remaining >= 2 {
-            let vec = Simd::<u32, 2>::from_slice(&values[offset..offset + 2]);
-            let mask = is_pal_simd_mask_generic(vec);
-            if mask.any() {
-                let lane = mask.to_bitmask().trailing_zeros() as usize;
-                return Some(vec[lane]);
-            }
-            offset += 2;
-        } else {
-            let value = values[offset];
-            if is_pal_half_reverse(value) {
-                return Some(value);
-            }
-            offset += 1;
-        }
-    }
-
-    None
 }
 
 #[inline(always)]
@@ -642,100 +598,6 @@ pub fn process_compact_until_done_ptr(values: &[u32]) -> Option<u32> {
             return Some(x);
         }
     }
-    None
-}
-
-#[inline]
-fn scan_smallest_tail(
-    x: u32,
-    start: u32,
-    y_upper: u32,
-    scratch: &mut ArrayVec<u32, SCRATCH_CAPACITY>,
-) -> Option<u32> {
-    if start > y_upper {
-        return process_compact_until_done(scratch.as_slice());
-    }
-
-    let mut current = start;
-    while current <= y_upper {
-        let prod = x * current;
-        if prod < 10 {
-            return Some(prod);
-        }
-        if prod.is_multiple_of(10) || (has_even_digits(prod) && !prod.is_multiple_of(11)) {
-            if current == y_upper {
-                break;
-            }
-            current += 1;
-            continue;
-        }
-
-        scratch.push(prod);
-        if current == y_upper {
-            break;
-        }
-        current += 1;
-    }
-
-    process_compact_until_done(scratch.as_slice())
-}
-
-#[inline]
-fn scan_largest_tail(
-    x: u32,
-    y_lower: u32,
-    start: u32,
-    scratch: &mut ArrayVec<u32, SCRATCH_CAPACITY>,
-) -> Option<u32> {
-    if start < y_lower {
-        return process_compact_until_done(scratch.as_slice());
-    }
-
-    let mut current = start;
-    while current >= y_lower {
-        let prod = x * current;
-        if prod < 10 {
-            return Some(prod);
-        }
-        if prod.is_multiple_of(10) || (has_even_digits(prod) && !prod.is_multiple_of(11)) {
-            if current == y_lower {
-                break;
-            }
-            current -= 1;
-            continue;
-        }
-
-        scratch.push(prod);
-        if current == y_lower {
-            break;
-        }
-        current -= 1;
-    }
-
-    let res = process_compact_until_done(scratch.as_slice());
-    scratch.clear();
-    res
-}
-
-/// Processes one full simd lane, removing it from the supplied scratch.
-/// Returns the first found palindrome.
-/// We don't care about later palindromes because this is always processing for one "row"
-/// Within the context of each row the first palindrome found will always be the
-/// highest, so we can avoid processing the rest.
-#[inline(always)]
-fn process_compact_full_lane(values: &mut ArrayVec<u32, SCRATCH_CAPACITY>) -> Option<u32> {
-    if values.len() < SIMD_WIDTH {
-        return None; // caller can invoke unconditionally
-    }
-    let vec = Simd::<u32, SIMD_WIDTH>::from_slice(&values[0..SIMD_WIDTH]);
-    let mask = is_pal_simd_mask_generic(vec);
-    if mask.any() {
-        let lane = mask.to_bitmask().trailing_zeros() as usize;
-        values.drain(0..SIMD_WIDTH);
-        return Some(vec[lane]);
-    }
-
-    values.drain(0..SIMD_WIDTH);
     None
 }
 

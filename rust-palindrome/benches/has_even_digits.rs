@@ -365,6 +365,18 @@ fn bench_palindrome_checks(c: &mut Criterion) {
         });
     }
 
+    if should_run("is_pal_lut") {
+        c.bench_function("is_pal_lut", |b| {
+            b.iter(|| {
+                let mut acc = 0u32;
+                for &n in &inputs {
+                    acc += is_pal(black_box(n)) as u32;
+                }
+                black_box(acc)
+            });
+        });
+    }
+
     if should_run("is_pal_flipped") {
         c.bench_function("is_pal_flipped", |b| {
             b.iter(|| {

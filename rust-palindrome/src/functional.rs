@@ -6,8 +6,11 @@
 
 use std::num::NonZeroU32;
 
-use crate::{divrem_u32_magic, has_even_digits};
+use crate::{divrem_u32_magic, has_even_digits, push_pair_unchecked_is_full};
 use arrayvec::ArrayVec;
+
+const NO_HIT_SMALLEST: u32 = u32::MAX;
+const NO_HIT_LARGEST: u32 = 0;
 
 /// Functional recursive palindrome check using half-reverse method
 /// Mirrors the Haskell `isPalindrome` function with recursive `loop`
@@ -43,9 +46,13 @@ fn half_reverse_loop(m: u32, rev: u32) -> bool {
 /// Functional recursive factor pair collection
 /// Mirrors the Haskell `collectPositiveFactorPairs` function
 #[inline(always)]
-pub fn collect_factor_pairs(product: u32, min: u32, max: u32) -> ArrayVec<u32, 4> {
+pub fn collect_factor_pairs(product: u32, min: NonZeroU32, max: NonZeroU32) -> ArrayVec<u32, 4> {
+    let min = min.get();
+    let max = max.get();
+
     let sqrt_p = product.isqrt();
-    let low = product.div_ceil(max).max(min);
+    let (q, _) = divrem_u32_magic(product + max - 1, max);
+    let low = q.max(min);
     let high = sqrt_p.min(max);
 
     // Verified for bounds [1, 999] inclusive (both smallest and largest):
@@ -63,62 +70,61 @@ fn collect_pairs_recursive(product: u32, x: u32, high: u32, result: &mut ArrayVe
 
     let (y, r) = divrem_u32_magic(product, x);
     if r == 0 {
-        result.push(x);
-        result.push(y);
+        unsafe {
+            if push_pair_unchecked_is_full(result, x, y) {
+                return;
+            }
+        }
     }
 
-    become collect_pairs_recursive(product, x + 1, high, result);
+    become collect_pairs_recursive(product, x + 1, high, result)
 }
 
 #[inline(always)]
 pub fn smallest_product_functional(min: u32, max: u32) -> Option<u32> {
     // Start row search at x = min with sentinel best
-    search_smallest(min, u32::MAX, max)
+    search_smallest(min, NO_HIT_SMALLEST, max)
 }
 
 #[inline(always)]
 fn search_smallest(x: u32, best: u32, max_bound: u32) -> Option<u32> {
-    // Mirrors Haskell's searchRowsForSmallest with x ascending and pruning
     if x > max_bound || x * x >= best {
-        if best == u32::MAX { None } else { Some(best) }
-    } else {
-        match search_row_smallest(x, best, max_bound) {
-            None => search_smallest(x + 1, best, max_bound),
-            Some(new_best) => search_smallest(x + 1, new_best, max_bound),
-        }
-    }
-}
-
-#[inline(always)]
-fn search_row_smallest(x: u32, current_best: u32, max: u32) -> Option<u32> {
-    let x_nz = unsafe { NonZeroU32::new_unchecked(x) };
-    let (q, _) = divrem_u32_magic(current_best - 1, x_nz.get());
-    let y_upper = (q).min(max);
-    if y_upper < x {
-        None
-    } else {
-        search_column_smallest(x, x, x * x, y_upper, current_best)
-    }
-}
-
-#[inline(always)]
-fn search_column_smallest(
-    x: u32,
-    y: u32,
-    prod: u32,
-    y_upper: u32,
-    current_best: u32,
-) -> Option<u32> {
-    if y > y_upper {
-        if current_best == u32::MAX {
+        if best == NO_HIT_SMALLEST {
             None
         } else {
-            Some(current_best)
+            Some(best)
         }
-    } else if is_pal_functional(prod) {
-        Some(prod)
     } else {
-        become search_column_smallest(x, y + 1, prod + x, y_upper, current_best)
+        let row_best = search_row_smallest(x, best, max_bound);
+        let next_best = if row_best == NO_HIT_SMALLEST {
+            best
+        } else {
+            row_best
+        };
+        become search_smallest(x + 1, next_best, max_bound)
+    }
+}
+
+#[inline(always)]
+fn search_row_smallest(x: u32, current_best: u32, max: u32) -> u32 {
+    debug_assert!(x > 0);
+    let (q, _) = divrem_u32_magic(current_best - 1, x);
+    let y_upper = (q).min(max);
+    if y_upper < x {
+        NO_HIT_SMALLEST
+    } else {
+        search_column_smallest(x, x, x * x, y_upper)
+    }
+}
+
+#[inline(always)]
+fn search_column_smallest(x: u32, y: u32, prod: u32, y_upper: u32) -> u32 {
+    if y > y_upper {
+        NO_HIT_SMALLEST
+    } else if is_pal_functional(prod) {
+        prod
+    } else {
+        become search_column_smallest(x, y + 1, prod + x, y_upper)
     }
 }
 
@@ -127,65 +133,72 @@ fn search_column_smallest(
 #[inline(always)]
 pub fn largest_product_functional(min: u32, max: u32) -> Option<u32> {
     // Start with x = max, keep max as fixed upper bound
-    search_largest(max, min, max, 0)
+    search_largest(max, min, max, NO_HIT_LARGEST)
 }
 
 #[inline(always)]
 fn search_largest(x: u32, min: u32, max: u32, best: u32) -> Option<u32> {
     if x < min || x * max <= best {
-        if best == 0 { None } else { Some(best) }
-    } else {
-        match search_row_for_largest(x, best, max) {
-            None => search_largest(x - 1, min, max, best),
-            Some(new_best) => search_largest(x - 1, min, max, new_best),
+        if best == NO_HIT_LARGEST {
+            None
+        } else {
+            Some(best)
         }
+    } else {
+        let row_best = search_row_for_largest(x, best, max);
+        let next_best = if row_best == NO_HIT_LARGEST {
+            best
+        } else {
+            row_best
+        };
+        become search_largest(x - 1, min, max, next_best)
     }
 }
 
 #[inline(always)]
 pub fn smallest_functional(min: u32, max: u32) -> Option<(u32, ArrayVec<u32, 4>)> {
-    smallest_product_functional(min, max)
-        .map(|product| (product, collect_factor_pairs(product, min, max)))
+    smallest_product_functional(min, max).map(|product| {
+        (
+            product,
+            collect_factor_pairs(product, unsafe { NonZeroU32::new_unchecked(min) }, unsafe {
+                NonZeroU32::new_unchecked(max)
+            }),
+        )
+    })
 }
 
 #[inline(always)]
 pub fn largest_functional(min: u32, max: u32) -> Option<(u32, ArrayVec<u32, 4>)> {
-    largest_product_functional(min, max)
-        .map(|product| (product, collect_factor_pairs(product, min, max)))
+    largest_product_functional(min, max).map(|product| {
+        (
+            product,
+            collect_factor_pairs(product, unsafe { NonZeroU32::new_unchecked(min) }, unsafe {
+                NonZeroU32::new_unchecked(max)
+            }),
+        )
+    })
 }
 
 #[inline(always)]
-fn search_row_for_largest(x: u32, best: u32, max: u32) -> Option<u32> {
-    let x_nz = unsafe { NonZeroU32::new_unchecked(x) };
-    let (q, _) = divrem_u32_magic(best, x_nz.get());
+fn search_row_for_largest(x: u32, best: u32, max: u32) -> u32 {
+    debug_assert!(x > 0);
+    let (q, _) = divrem_u32_magic(best, x);
     let y_lower = (q + 1).max(x);
     if y_lower > max {
-        None
+        NO_HIT_LARGEST
     } else {
-        search_column_largest(x, max, x * max, y_lower, 0)
+        search_column_largest(x, max, x * max, y_lower)
     }
 }
 
 #[inline(always)]
-fn search_column_largest(
-    x: u32,
-    y: u32,
-    prod: u32,
-    y_lower: u32,
-    current_best: u32,
-) -> Option<u32> {
+fn search_column_largest(x: u32, y: u32, prod: u32, y_lower: u32) -> u32 {
     if y < y_lower {
-        if current_best == 0 {
-            None
-        } else {
-            Some(current_best)
-        }
+        NO_HIT_LARGEST
+    } else if is_pal_functional(prod) {
+        prod
     } else {
-        if is_pal_functional(prod) {
-            Some(prod)
-        } else {
-            become search_column_largest(x, y - 1, prod - x, y_lower, current_best)
-        }
+        become search_column_largest(x, y - 1, prod - x, y_lower)
     }
 }
 

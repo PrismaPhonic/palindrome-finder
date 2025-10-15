@@ -126,6 +126,7 @@ const fn recip64(d: u32) -> u64 {
     (1u128 << 64).div_ceil(d as u128) as u64
 }
 
+#[inline(always)]
 const fn build_recip_1k() -> [u64; 1000] {
     let mut table = [0u64; 1000];
     let mut i = 1usize;
@@ -146,6 +147,7 @@ pub fn divrem_u32_magic(n: u32, d: u32) -> (u32, u32) {
     debug_assert!((1..=999).contains(&d));
 
     // Fast path handles 2^64 overflow case.
+    #[cfg(debug_assertions)] // Useful in tests, but we don't benchmark with it.
     if d == 1 {
         return (n, 0);
     }
@@ -153,10 +155,10 @@ pub fn divrem_u32_magic(n: u32, d: u32) -> (u32, u32) {
     // unchecked to avoid bounds checks in hot code (debug_assert guards it)
     let m = unsafe { *RECIP_1K.0.get_unchecked(d as usize) };
     let mut q = (((n as u128) * (m as u128)) >> 64) as u32;
-    let mut r = n.wrapping_sub(q.wrapping_mul(d));
+    let mut r = n - q * d;
     if r >= d {
-        q = q.wrapping_add(1);
-        r = r.wrapping_sub(d);
+        q += 1;
+        r -= d;
     }
     (q, r)
 }
@@ -170,6 +172,37 @@ pub fn is_multiple_of_magic(n: u32, d: u32) -> bool {
 // Factor pair collection
 //
 
+// Pushes a pair into ArrayVec without checking length. Asserts safety in debug
+// builds.
+// Returns true when full.
+#[inline(always)]
+unsafe fn push_pair_unchecked_is_full(out: &mut ArrayVec<u32, 4>, x: u32, y: u32) -> bool {
+    debug_assert!(out.len() <= 2);
+    let len = out.len();
+    let ptr = out.as_mut_ptr();
+    unsafe {
+        core::ptr::write(ptr.add(len), x);
+        core::ptr::write(ptr.add(len + 1), y);
+        out.set_len(len + 2);
+    }
+    // Len was previously 2, so it's now 4 and we are full.
+    len == 2
+}
+
+// Pushes a pair into ArrayVec without checking length. Asserts safety in debug
+// builds.
+#[inline(always)]
+unsafe fn push_pair_unchecked(out: &mut ArrayVec<u32, 4>, x: u32, y: u32) {
+    debug_assert!(out.len() <= 2);
+    let len = out.len();
+    let ptr = out.as_mut_ptr();
+    unsafe {
+        core::ptr::write(ptr.add(len), x);
+        core::ptr::write(ptr.add(len + 1), y);
+        out.set_len(len + 2);
+    }
+}
+
 #[inline]
 pub fn collect_factor_pairs_bounded_largest(
     product: NonZeroU32,
@@ -179,40 +212,29 @@ pub fn collect_factor_pairs_bounded_largest(
     search_max: NonZeroU32,
     out: &mut ArrayVec<u32, 4>,
 ) {
-    if out.len() >= 4 {
-        return;
-    }
+    assert!(out.len() == 2);
 
     let product = product.get();
     let min = min.get();
     let max = max.get();
 
     // x in [ceil(product/max) .. min(isqrt(product), search_max)]
-    let low = product.div_ceil(max).max(min);
+    let (q, _) = divrem_u32_magic(product + max - 1, max);
+    let low = q.max(min);
     let high = product.isqrt().min(search_max.get());
     if low > high {
         return;
     }
 
     let mut x = low;
-    // raw write path to minimize bounds checks
-    let ptr = out.as_mut_ptr();
-    let mut len = out.len();
-
-    unsafe {
-        while x <= high {
-            let (y, r) = divrem_u32_magic(product, x);
-            if r == 0 {
-                *ptr.add(len) = x;
-                *ptr.add(len + 1) = y;
-                len += 2;
-                if len >= 4 {
-                    break;
-                }
-            }
-            x += 1;
+    while x <= high {
+        let (y, r) = divrem_u32_magic(product, x);
+        if r == 0 {
+            unsafe { push_pair_unchecked(out, x, y) };
+            // We only ever push once.
+            return;
         }
-        out.set_len(len);
+        x += 1;
     }
 }
 
@@ -226,16 +248,15 @@ pub fn collect_factor_pairs_bounded_smallest(
     start_above: NonZeroU32,
     out: &mut ArrayVec<u32, 4>,
 ) {
-    if out.len() >= 4 {
-        return;
-    }
+    assert!(out.len() == 2);
 
     let product = product.get();
     let min = min.get();
     let max = max.get();
 
     // x in [ceil(product/max) .. isqrt(product)], but begin at max(low, start_above)
-    let low = product.div_ceil(max).max(min);
+    let (q, _) = divrem_u32_magic(product + max - 1, max);
+    let low = q.max(min);
     let base = low.max(start_above.get());
     let high = product.isqrt();
     if base > high {
@@ -243,23 +264,15 @@ pub fn collect_factor_pairs_bounded_smallest(
     }
 
     let mut x = base;
-    let ptr = out.as_mut_ptr();
-    let mut len = out.len();
 
-    unsafe {
-        while x <= high {
-            let (y, r) = divrem_u32_magic(product, x);
-            if r == 0 {
-                *ptr.add(len) = x;
-                *ptr.add(len + 1) = y;
-                len += 2;
-                if len >= 4 {
-                    break;
-                }
-            }
-            x += 1;
+    while x <= high {
+        let (y, r) = divrem_u32_magic(product, x);
+        if r == 0 {
+            unsafe { push_pair_unchecked(out, x, y) };
+            // We only ever push once.
+            return;
         }
-        out.set_len(len);
+        x += 1;
     }
 }
 
@@ -325,8 +338,7 @@ pub fn smallest_product(
             break;
         }
 
-        let x_nz = unsafe { NonZeroU32::new_unchecked(x) };
-        let (q, _) = divrem_u32_magic(best - 1, x_nz.get());
+        let (q, _) = divrem_u32_magic(best - 1, x);
         let y_upper = (q).min(max);
 
         if y_upper >= x {
@@ -415,8 +427,7 @@ pub fn largest_product(
             break;
         }
 
-        let x_nz = unsafe { NonZeroU32::new_unchecked(x) };
-        let (q, _) = divrem_u32_magic(best, x_nz.get());
+        let (q, _) = divrem_u32_magic(best, x);
         let y_lower = (q + 1).max(x);
 
         if y_lower <= max {
@@ -571,7 +582,7 @@ where
     }
 }
 
-#[inline(always)]
+#[inline]
 fn accumulate_result(acc: &mut u64, counter: &mut u64, result: Option<(u32, ArrayVec<u32, 4>)>) {
     if let Some((prod, pairs)) = result {
         *acc += prod as u64 + *counter + pairs.into_iter().map(|value| value as u64).sum::<u64>();
