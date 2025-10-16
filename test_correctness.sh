@@ -69,6 +69,16 @@ result=$(test_server "PyPy" "./target-bin/palprod-pypy-smallest" "smallest")
 echo "PyPy        | $result"
 smallest_results+=("PyPy:$result")
 
+# Test Deno smallest
+result=$(test_server "Deno" "./target-bin/palprod-deno-smallest" "smallest")
+echo "Deno        | $result"
+smallest_results+=("Deno:$result")
+
+# Test Bun smallest
+result=$(test_server "Bun" "./target-bin/palprod-bun-smallest" "smallest")
+echo "Bun         | $result"
+smallest_results+=("Bun:$result")
+
 # Test largest servers
 echo ""
 echo "=== LARGEST SERVERS ==="
@@ -111,6 +121,16 @@ largest_results+=("Python:$result")
 result=$(test_server "PyPy" "./target-bin/palprod-pypy-largest" "largest")
 echo "PyPy        | $result"
 largest_results+=("PyPy:$result")
+
+# Test Deno largest
+result=$(test_server "Deno" "./target-bin/palprod-deno-largest" "largest")
+echo "Deno        | $result"
+largest_results+=("Deno:$result")
+
+# Test Bun largest
+result=$(test_server "Bun" "./target-bin/palprod-bun-largest" "largest")
+echo "Bun         | $result"
+largest_results+=("Bun:$result")
 
 # Analyze results
 echo ""

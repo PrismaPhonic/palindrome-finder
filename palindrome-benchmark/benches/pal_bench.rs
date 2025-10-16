@@ -119,7 +119,7 @@ fn bench_servered(c: &mut Criterion, name: &str, bin: &str, min: i32, max: i32) 
     r.init(min, max);
 
     // optional short pre-prime (page cache / JITs); not measured
-    r.warmup(50_000);
+    r.warmup(500_000);
 
     c.bench_function(name, |b| {
         b.iter_custom(|iters| {
@@ -158,6 +158,16 @@ pub fn benches(c: &mut Criterion) {
     let python_sm = "../target-bin/palprod-python-smallest";
     let pypy_lg = "../target-bin/palprod-py-largest";
     let pypy_sm = "../target-bin/palprod-py-smallest";
+    let deno_lg = "../target-bin/palprod-deno-largest";
+    let deno_sm = "../target-bin/palprod-deno-smallest";
+    let bun_lg = "../target-bin/palprod-bun-largest";
+    let bun_sm = "../target-bin/palprod-bun-smallest";
+
+    bench_servered(c, "Deno largest 2..999", deno_lg, 2, 999);
+    bench_servered(c, "Deno smallest 2..999", deno_sm, 2, 999);
+
+    bench_servered(c, "Bun largest 2..999", bun_lg, 2, 999);
+    bench_servered(c, "Bun smallest 2..999", bun_sm, 2, 999);
 
     bench_servered(c, "PyPy largest 2..999", pypy_lg, 2, 999);
     bench_servered(c, "PyPy smallest 2..999", pypy_sm, 2, 999);
