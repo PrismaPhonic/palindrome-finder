@@ -156,14 +156,14 @@ pub fn benches(c: &mut Criterion) {
     let coalton_sm = "../target-bin/palprod-coalton-smallest";
     let python_lg = "../target-bin/palprod-python-largest";
     let python_sm = "../target-bin/palprod-python-smallest";
-    let pypy_lg = "../target-bin/palprod-pypy-largest";
-    let pypy_sm = "../target-bin/palprod-pypy-smallest";
-
-    bench_servered(c, "Python largest 2..999", python_lg, 2, 999);
-    bench_servered(c, "Python smallest 2..999", python_sm, 2, 999);
+    let pypy_lg = "../target-bin/palprod-py-largest";
+    let pypy_sm = "../target-bin/palprod-py-smallest";
 
     bench_servered(c, "PyPy largest 2..999", pypy_lg, 2, 999);
     bench_servered(c, "PyPy smallest 2..999", pypy_sm, 2, 999);
+
+    bench_servered(c, "Python largest 2..999", python_lg, 2, 999);
+    bench_servered(c, "Python smallest 2..999", python_sm, 2, 999);
 
     bench_servered(c, "RUST               largest 2..999", rust_lg, 2, 999);
     bench_servered(c, "RUST               smallest 2..999", rust_sm, 2, 999);

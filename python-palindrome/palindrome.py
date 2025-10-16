@@ -9,26 +9,22 @@ import math
 from typing import Optional, List, Tuple
 
 
+
 def has_even_digits(n: int) -> bool:
     """
     Returns True if n has an even number of decimal digits.
     Preconditions: n >= 11. Callers should filter out n < 10 and trailing-zero cases.
     We use this to apply the rule "even-length palindromes must be divisible by 11".
     """
-    if n < 100:
-        return True  # 2 digits
-    elif n < 1_000:
-        return False  # 3 digits
-    elif n < 10_000:
-        return True  # 4 digits
-    elif n < 100_000:
-        return False  # 5 digits
-    elif n < 1_000_000:
-        return True  # 6 digits
-    else:
-        return True  # 10 digits (max for uint32)
+    cmp_a = int(n >= 100)
+    cmp_b = int(n >= 1_000)
+    cmp_c = int(n >= 10_000)
+    cmp_d = int(n >= 100_000)
+    t0 = cmp_a ^ cmp_b
+    t1 = cmp_c ^ cmp_d
+    parity = 1 ^ (t0 ^ t1)
+    return parity == 1
 
-# PyPy will automatically JIT compile hot functions
 
 
 def is_palindrome(n: int) -> bool:
@@ -56,6 +52,7 @@ def is_palindrome(n: int) -> bool:
     return m == rev or m == rev // 10
 
 
+
 def collect_factor_pairs(product: int, min_val: int, max_val: int) -> List[int]:
     """
     Collects ordered factor pairs (x, y) (with x <= y) such that
@@ -78,6 +75,7 @@ def collect_factor_pairs(product: int, min_val: int, max_val: int) -> List[int]:
                 break
 
     return pairs
+
 
 
 def smallest(min_val: int, max_val: int) -> Optional[Tuple[int, List[int]]]:
@@ -120,6 +118,7 @@ def smallest(min_val: int, max_val: int) -> Optional[Tuple[int, List[int]]]:
     else:
         pairs = collect_factor_pairs(best, min_val, max_val)
         return (best, pairs)
+
 
 
 def largest(min_val: int, max_val: int) -> Optional[Tuple[int, List[int]]]:
@@ -167,7 +166,6 @@ def largest(min_val: int, max_val: int) -> Optional[Tuple[int, List[int]]]:
     else:
         return None
 
-# PyPy will automatically JIT compile hot functions
 
 
 def run_server(do_iters_func):
@@ -216,6 +214,7 @@ def run_server(do_iters_func):
             break
 
 
+
 def do_iters_smallest(min_val: int, max_val: int, iters: int) -> Tuple[int, int, int]:
     """Run iterations for smallest palindrome finding."""
     acc = 0
@@ -244,6 +243,7 @@ def do_iters_smallest(min_val: int, max_val: int, iters: int) -> Tuple[int, int,
     return last_prod, acc, nanos
 
 
+
 def do_iters_largest(min_val: int, max_val: int, iters: int) -> Tuple[int, int, int]:
     """Run iterations for largest palindrome finding."""
     acc = 0
@@ -270,6 +270,7 @@ def do_iters_largest(min_val: int, max_val: int, iters: int) -> Tuple[int, int, 
     last_prod = last_result[0] if last_result else 0
     
     return last_prod, acc, nanos
+
 
 
 if __name__ == "__main__":

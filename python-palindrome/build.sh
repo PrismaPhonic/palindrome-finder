@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/zsh
 set -e
 
 # Build script for Python palindrome solution
@@ -22,8 +22,6 @@ fi
 echo "Activating virtual environment..."
 source venv/bin/activate
 
-# Install dependencies (none required - uses only standard library)
-echo "No external dependencies required - using Python standard library only"
 
 # Create target directory
 mkdir -p ../target-bin
@@ -47,28 +45,30 @@ source venv/bin/activate
 exec python palindrome.py largest --server
 EOF
 
-# PyPy executables with JIT optimization
-cat > ../target-bin/palprod-pypy-smallest << 'EOF'
+# PyPy executables with optimized JIT configurations
+# Optimal settings: vectorization for smallest, ultrafast for largest
+cat > ../target-bin/palprod-py-smallest << 'EOF'
 #!/bin/bash
 cd "$(dirname "$0")/../python-palindrome"
-exec pypy3 --jit function_threshold=100 palindrome.py smallest --server
+exec pypy3 --jit function_threshold=100,threshold=100,vec=1 palindrome.py smallest --server
 EOF
 
-cat > ../target-bin/palprod-pypy-largest << 'EOF'
+cat > ../target-bin/palprod-py-largest << 'EOF'
 #!/bin/bash
 cd "$(dirname "$0")/../python-palindrome"
-exec pypy3 --jit function_threshold=100 palindrome.py largest --server
+exec pypy3 --jit function_threshold=30,threshold=30 palindrome.py largest --server
 EOF
+
 
 # Make executables
 chmod +x ../target-bin/palprod-python-smallest
 chmod +x ../target-bin/palprod-python-largest
-chmod +x ../target-bin/palprod-pypy-smallest
-chmod +x ../target-bin/palprod-pypy-largest
+chmod +x ../target-bin/palprod-py-smallest
+chmod +x ../target-bin/palprod-py-largest
 
 echo "Build complete!"
 echo "Executables created:"
 echo "  - ../target-bin/palprod-python-smallest (regular Python)"
 echo "  - ../target-bin/palprod-python-largest (regular Python)"
-echo "  - ../target-bin/palprod-pypy-smallest (PyPy with JIT)"
-echo "  - ../target-bin/palprod-pypy-largest (PyPy with JIT)"
+echo "  - ../target-bin/palprod-py-smallest (PyPy)"
+echo "  - ../target-bin/palprod-py-largest (PyPy)"
