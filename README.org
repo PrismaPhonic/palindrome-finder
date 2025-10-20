@@ -285,40 +285,40 @@ Latest average times per iteration for largest:
 
 | Implementation               |  Range | Task    | Time      |
 |------------------------------+--------+---------+-----------|
-| Rust                         | 2..999 | largest | 1.4033 µs |
-| Rust Functional              | 2..999 | largest | 1.4891 µs |
-| Haskell                      | 2..999 | largest | 1.4998 µs |
-| Rust (PGO + Bolt)            | 2..999 | largest | 1.5073 µs |
-| Rust Functional (PGO + Bolt) | 2..999 | largest | 1.5204 µs |
-| Rust Simd                    | 2..999 | largest | 1.9310 µs |
-| Rust Simd (PGO + Bolt)       | 2..999 | largest | 1.9585 µs |
-| Golang (PGO)                 | 2..999 | largest | 2.1527 µs |
-| Golang                       | 2..999 | largest | 2.1576 µs |
-| Common Lisp                  | 2..999 | largest | 2.2169 µs |
-| Coalton                      | 2..999 | largest | 2.5700 µs |
-| Typescript (Bun)             | 2..999 | largest | 2.7205 µs |
-| Typescript (Deno)            | 2..999 | largest | 3.0037 µs |
-| Python (PyPy)                | 2..999 | largest | 4.9943 µs |
+| Rust                         | 2..999 | largest | 1.5641 µs |
+| Haskell                      | 2..999 | largest | 1.4366 µs |
+| Rust Functional              | 2..999 | largest | 1.3915 µs |
+| Rust (PGO + Bolt)            | 2..999 | largest | 1.8653 µs |
+| Rust Functional (PGO + Bolt) | 2..999 | largest | 1.5385 µs |
+| Rust Simd                    | 2..999 | largest | 1.9369 µs |
+| Rust Simd (PGO + Bolt)       | 2..999 | largest | 1.8745 µs |
+| Golang (PGO)                 | 2..999 | largest | 2.1106 µs |
+| Golang                       | 2..999 | largest | 2.1171 µs |
+| Common Lisp                  | 2..999 | largest | 2.1902 µs |
+| Coalton                      | 2..999 | largest | 2.5329 µs |
+| Typescript (Bun)             | 2..999 | largest | 2.5685 µs |
+| Typescript (Deno)            | 2..999 | largest | 3.0049 µs |
+| Python (PyPy)                | 2..999 | largest | 5.3606 µs |
 | Python (CPython)             | 2..999 | largest | 113.77 µs |
 
 Latest average times per iteration for smallest
 
 | Implementation               |  Range | Task     | Time      |
 |------------------------------+--------+----------+-----------|
-| Rust Functional              | 2..999 | smallest | 1.6370 µs |
-| Rust Simd (PGO + Bolt)       | 2..999 | smallest | 1.6379 µs |
-| Rust                         | 2..999 | smallest | 1.6713 µs |
-| Rust (PGO + Bolt)            | 2..999 | smallest | 1.6890 µs |
-| Rust Functional (PGO + Bolt) | 2..999 | smallest | 1.7008 µs |
-| Rust Simd                    | 2..999 | smallest | 1.7228 µs |
-| Haskell                      | 2..999 | smallest | 2.0225 µs |
-| Golang (PGO)                 | 2..999 | smallest | 2.9359 µs |
-| Common Lisp                  | 2..999 | smallest | 3.0984 µs |
-| Golang                       | 2..999 | smallest | 3.1503 µs |
-| Coalton                      | 2..999 | smallest | 3.6000 µs |
-| Typescript (Bun)             | 2..999 | smallest | 4.0457 µs |
-| Typescript (Deno)            | 2..999 | smallest | 4.6987 µs |
-| Python (PyPy)                | 2..999 | smallest | 10.044 µs |
+| Rust Simd (PGO + Bolt)       | 2..999 | smallest | 1.6333 µs |
+| Rust Functional              | 2..999 | smallest | 1.6769 µs |
+| Rust                         | 2..999 | smallest | 1.7049 µs |
+| Rust (PGO + Bolt)            | 2..999 | smallest | 1.7061 µs |
+| Rust Functional (PGO + Bolt) | 2..999 | smallest | 1.7569 µs |
+| Rust Simd                    | 2..999 | smallest | 1.7258 µs |
+| Haskell                      | 2..999 | smallest | 1.9480 µs |
+| Golang (PGO)                 | 2..999 | smallest | 2.9107 µs |
+| Common Lisp                  | 2..999 | smallest | 3.1108 µs |
+| Golang                       | 2..999 | smallest | 3.0843 µs |
+| Coalton                      | 2..999 | smallest | 3.5491 µs |
+| Typescript (Bun)             | 2..999 | smallest | 3.7444 µs |
+| Typescript (Deno)            | 2..999 | smallest | 4.5774 µs |
+| Python (PyPy)                | 2..999 | smallest | 10.567 µs |
 | Python (CPython)             | 2..999 | smallest | 228.37 µs |
 
 * Rust functional implementation
