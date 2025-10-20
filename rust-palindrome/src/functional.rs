@@ -19,17 +19,22 @@ pub fn is_pal_functional(n: u32) -> bool {
     if n < 10 {
         return true;
     }
+
+    let rev = n % 10;
+    let m = n / 10;
+
     // Non-zero numbers ending in 0 cannot be palindromes.
-    if n.is_multiple_of(10) {
+    if rev == 0 {
         return false;
     }
+
     // Even-length palindromes must be divisible by 11
     if has_even_digits(n) && !n.is_multiple_of(11) {
         return false;
     }
 
     // Recursive half-reverse function (mirrors Haskell `loop`)
-    half_reverse_loop(n, 0)
+    half_reverse_loop(m, rev)
 }
 
 #[inline(always)]

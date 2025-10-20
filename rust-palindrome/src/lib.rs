@@ -47,8 +47,6 @@
 //! - The half-reverse palindrome + 11 rule reduces calls to the palindrome test.
 //! - The tight y bounds in both searches greatly shrink the nested loops.
 //! - The factor enumeration window keeps divisibility checks minimal.
-//! - Build with release settings (opt-level=3, lto=thin, codegen-units=1,
-//!   panic=abort). Consider RUSTFLAGS="-C target-cpu=native" for local runs.
 //!
 //! Correctness notes
 //! -----------------
@@ -85,22 +83,18 @@ pub fn has_even_digits(n: u32) -> bool {
 }
 
 /// Return true if `n` is a decimal palindrome (numeric half-reversal).
-///
-/// Fast-paths:
-/// - `n < 10` is palindrome
-/// - `n % 10 == 0` (and `n != 0`) cannot be palindrome
-/// - even-length palindromes must be divisible by 11; if not, reject
-///
-/// Core:
-/// - Build `rev` by taking right digits of `m` until `rev >= m`.
-/// - Then return `m == rev || m == rev/10`.
+/// Only supports up to 6 digits.
 #[inline(always)]
 pub fn is_pal(n: u32) -> bool {
     if n < 10 {
         return true;
     }
+
+    let mut rev = n % 10;
+    let mut m = n / 10;
+
     // Non-zero numbers ending in 0 cannot be palindromes.
-    if n.is_multiple_of(10) {
+    if rev == 0 {
         return false;
     }
 
@@ -110,14 +104,96 @@ pub fn is_pal(n: u32) -> bool {
     }
 
     // Half-reverse
-    let mut m = n;
-    let mut rev: u32 = 0;
     while m > rev {
         rev = rev * 10 + m % 10;
         m /= 10;
     }
 
     m == rev || m == rev / 10
+}
+
+#[inline(always)]
+pub fn is_pal_v3(n: u32) -> bool {
+    // 1 digit
+    if n < 10 {
+        return true;
+    }
+
+    // First peel once and reuse everywhere
+    // We would have to check trailing zeros anyways and LLVM will fuse these
+    // into a single magic constant based instruction.
+    let mut rev = n % 10;
+    let mut m = n / 10;
+
+    // Non-zero numbers ending with 0 cannot be palindromes.
+    if rev == 0 {
+        return false;
+    }
+
+    if n < 100 {
+        // 2 digits
+        return m == rev;
+    }
+
+    // Second peel
+    rev = rev * 10 + (m % 10);
+    m /= 10;
+
+    if n < 10_000 {
+        // 3 or 4 digits.
+        return m == rev || m == rev / 10;
+    }
+
+    // 3rd peel
+    rev = rev * 10 + (m % 10);
+    m /= 10;
+
+    m == rev || m == rev / 10
+}
+
+#[inline(always)]
+#[allow(clippy::manual_is_multiple_of)]
+pub fn is_pal_v2(n: u32) -> bool {
+    // 1 digit
+    if n < 10 {
+        return true;
+    }
+
+    // First peel once and reuse everywhere
+    // We would have to check trailing zeros anyways and LLVM will fuse these
+    // into a single magic constant based instruction.
+    let mut rev = n % 10;
+    let mut m = n / 10;
+
+    // Non-zero numbers ending with 0 cannot be palindromes.
+    if rev == 0 {
+        return false;
+    }
+
+    if n < 100 {
+        // 2 digits
+        return m == rev;
+    }
+
+    let ge1k = (n >= 1_000) as u32;
+    let ge10k = (n >= 10_000) as u32;
+    let ge100k = (n >= 100_000) as u32;
+    let parity = ge1k ^ ge10k ^ ge100k;
+
+    if parity == 1 && n % 11 != 0 {
+        return false;
+    }
+
+    loop {
+        rev = rev * 10 + (m % 10);
+        m /= 10;
+
+        if m <= rev {
+            break;
+        }
+    }
+
+    if parity == 1 { m == rev } else { m == rev / 10 }
 }
 
 #[inline(always)]
@@ -168,10 +244,6 @@ pub fn is_multiple_of_magic(n: u32, d: u32) -> bool {
     divrem_u32_magic(n, d).1 == 0
 }
 
-//
-// Factor pair collection
-//
-
 // Pushes a pair into ArrayVec without checking length. Asserts safety in debug
 // builds.
 // Returns true when full.
@@ -189,115 +261,48 @@ unsafe fn push_pair_unchecked_is_full(out: &mut ArrayVec<u32, 4>, x: u32, y: u32
     len == 2
 }
 
-// Pushes a pair into ArrayVec without checking length. Asserts safety in debug
-// builds.
-#[inline(always)]
-unsafe fn push_pair_unchecked(out: &mut ArrayVec<u32, 4>, x: u32, y: u32) {
-    debug_assert!(out.len() <= 2);
-    let len = out.len();
-    let ptr = out.as_mut_ptr();
-    unsafe {
-        core::ptr::write(ptr.add(len), x);
-        core::ptr::write(ptr.add(len + 1), y);
-        out.set_len(len + 2);
-    }
-}
-
 #[inline]
-pub fn collect_factor_pairs_bounded_largest(
+pub fn collect_factor_pairs(
     product: NonZeroU32,
     min: NonZeroU32,
     max: NonZeroU32,
-    // search anything with x <= search_max (typically min(known_x, known_y) - 1)
-    search_max: NonZeroU32,
-    out: &mut ArrayVec<u32, 4>,
-) {
-    assert!(out.len() == 2);
-
+) -> ArrayVec<u32, 4> {
     let product = product.get();
     let min = min.get();
     let max = max.get();
 
-    // x in [ceil(product/max) .. min(isqrt(product), search_max)]
     let (q, _) = divrem_u32_magic(product + max - 1, max);
     let low = q.max(min);
-    let high = product.isqrt().min(search_max.get());
-    if low > high {
-        return;
-    }
-
-    let mut x = low;
-    while x <= high {
-        let (y, r) = divrem_u32_magic(product, x);
-        if r == 0 {
-            unsafe { push_pair_unchecked(out, x, y) };
-            // We only ever push once.
-            return;
-        }
-        x += 1;
-    }
-}
-
-#[inline]
-pub fn collect_factor_pairs_bounded_smallest(
-    product: NonZeroU32,
-    min: NonZeroU32,
-    max: NonZeroU32,
-    // start strictly above the known smaller factor to avoid duplicating it
-    // (typically known_x.min(known_y) + 1)
-    start_above: NonZeroU32,
-    out: &mut ArrayVec<u32, 4>,
-) {
-    assert!(out.len() == 2);
-
-    let product = product.get();
-    let min = min.get();
-    let max = max.get();
-
-    // x in [ceil(product/max) .. isqrt(product)], but begin at max(low, start_above)
-    let (q, _) = divrem_u32_magic(product + max - 1, max);
-    let low = q.max(min);
-    let base = low.max(start_above.get());
-    let high = product.isqrt();
-    if base > high {
-        return;
-    }
-
-    let mut x = base;
-
-    while x <= high {
-        let (y, r) = divrem_u32_magic(product, x);
-        if r == 0 {
-            unsafe { push_pair_unchecked(out, x, y) };
-            // We only ever push once.
-            return;
-        }
-        x += 1;
-    }
-}
-
-#[inline]
-pub fn collect_factor_pairs_range(product: u32, min: u32, max: u32) -> ArrayVec<u32, 4> {
-    // Tight window: x in [ceil(product/max) .. min(max, isqrt(product))]
-    let low = product.div_ceil(max).max(min);
     let high = product.isqrt().min(max);
 
     // Verified for bounds [1, 999] inclusive (both smallest and largest):
     // the factor-pair list never exceeds 4 slots (2 pairs). Using capacity=4
     // improves cache usage and reduces stack footprint for this benchmark scope.
     let mut out: ArrayVec<u32, 4> = ArrayVec::new_const();
-    for x in low..=high {
-        if product.is_multiple_of(x) {
-            // y is automatically >= x because x <= isqrt(product)
-            let y = product / x;
-            out.push(x);
-            out.push(y);
+    let mut len = 0usize;
+    let ptr = out.as_mut_ptr();
+
+    let mut x = low;
+    while x <= high {
+        let (y, r) = divrem_u32_magic(product, x);
+        if r == 0 {
+            unsafe {
+                core::ptr::write(ptr.add(len), x);
+                core::ptr::write(ptr.add(len + 1), y);
+            };
+            len += 2;
+            if len == 4 {
+                break;
+            }
         }
+        x += 1;
     }
 
+    unsafe { out.set_len(len) };
     out
 }
 
+//
 //
 // Smallest / largest searches with pruning
 //
@@ -317,15 +322,11 @@ pub fn collect_factor_pairs_range(product: u32, min: u32, max: u32) -> ArrayVec<
 /// - Iterate `y` from `x` to `y_upper`; the first palindrome in that row is
 ///   the row minimum; update `best` and continue.
 #[inline]
-pub fn smallest_product(
-    min: NonZeroU32,
-    max: NonZeroU32,
-) -> Option<(NonZeroU32, NonZeroU32, NonZeroU32)> {
+pub fn smallest_product(min: NonZeroU32, max: NonZeroU32) -> Option<NonZeroU32> {
     let min = min.get();
     let max = max.get();
 
     let mut best: u32 = u32::MAX;
-    let mut pair: (u32, u32) = (0, 0);
     let start = min.max(1);
 
     if start > max {
@@ -347,7 +348,6 @@ pub fn smallest_product(
             loop {
                 if is_pal(prod) {
                     best = prod;
-                    pair = (x, y);
                     break;
                 }
 
@@ -365,11 +365,7 @@ pub fn smallest_product(
     if best == u32::MAX {
         None
     } else {
-        Some((
-            unsafe { NonZeroU32::new_unchecked(best) },
-            unsafe { NonZeroU32::new_unchecked(pair.0) },
-            unsafe { NonZeroU32::new_unchecked(pair.1) },
-        ))
+        Some(unsafe { NonZeroU32::new_unchecked(best) })
     }
 }
 
@@ -377,15 +373,8 @@ pub fn smallest_product(
 pub fn smallest(min: u32, max: u32) -> Option<(u32, ArrayVec<u32, 4>)> {
     let min = unsafe { NonZeroU32::new_unchecked(min) };
     let max = unsafe { NonZeroU32::new_unchecked(max) };
-    smallest_product(min, max).map(|(product, x, y)| {
-        let x: u32 = x.into();
-        let y: u32 = y.into();
-        let mut factor_pairs = ArrayVec::new_const();
-        factor_pairs.push(x);
-        factor_pairs.push(y);
-        let start_above = unsafe { NonZeroU32::new_unchecked(x.min(y) + 1) };
-        collect_factor_pairs_bounded_smallest(product, min, max, start_above, &mut factor_pairs);
-
+    smallest_product(min, max).map(|product| {
+        let factor_pairs = collect_factor_pairs(product, min, max);
         (product.into(), factor_pairs)
     })
 }
@@ -406,15 +395,11 @@ pub fn smallest(min: u32, max: u32) -> Option<(u32, ArrayVec<u32, 4>)> {
 /// - Iterate `y` from `max` down to `y_lower`; the first palindrome in that row
 ///   is the row maximum; update `best` and continue.
 #[inline]
-pub fn largest_product(
-    min: NonZeroU32,
-    max: NonZeroU32,
-) -> Option<(NonZeroU32, NonZeroU32, NonZeroU32)> {
+pub fn largest_product(min: NonZeroU32, max: NonZeroU32) -> Option<NonZeroU32> {
     let min = min.get();
     let max = max.get();
 
     let mut best: u32 = 0;
-    let mut pair: (u32, u32) = (0, 0);
     let start = min.max(1);
 
     if start > max {
@@ -436,8 +421,6 @@ pub fn largest_product(
             loop {
                 if is_pal(prod) {
                     best = prod;
-                    pair = (x, y);
-                    break;
                 }
 
                 if y == y_lower {
@@ -452,11 +435,7 @@ pub fn largest_product(
     }
 
     if best > 0 {
-        Some((
-            unsafe { NonZeroU32::new_unchecked(best) },
-            unsafe { NonZeroU32::new_unchecked(pair.0) },
-            unsafe { NonZeroU32::new_unchecked(pair.1) },
-        ))
+        Some(unsafe { NonZeroU32::new_unchecked(best) })
     } else {
         None
     }
@@ -466,17 +445,8 @@ pub fn largest_product(
 pub fn largest(min: u32, max: u32) -> Option<(u32, ArrayVec<u32, 4>)> {
     let min = unsafe { NonZeroU32::new_unchecked(min) };
     let max = unsafe { NonZeroU32::new_unchecked(max) };
-    largest_product(min, max).map(|(product, x, y)| {
-        let x: u32 = x.into();
-        let y: u32 = y.into();
-        let search_max = NonZeroU32::new(x.min(y).saturating_sub(1));
-        let mut factor_pairs = ArrayVec::new_const();
-        factor_pairs.push(x);
-        factor_pairs.push(y);
-        if let Some(search_max) = search_max {
-            collect_factor_pairs_bounded_largest(product, min, max, search_max, &mut factor_pairs);
-        };
-
+    largest_product(min, max).map(|product| {
+        let factor_pairs = collect_factor_pairs(product, min, max);
         (product.into(), factor_pairs)
     })
 }
@@ -500,7 +470,6 @@ pub fn run_server<F>(mut do_iters: F)
 where
     F: FnMut(u32, u32, u64) -> (Option<u32>, u64, u64),
 {
-    #[inline(always)]
     fn next_field<'a>(buf: &'a [u8], i: &mut usize) -> &'a [u8] {
         let s = *i;
         while *i < buf.len() && buf[*i] != b' ' && buf[*i] != b'\n' {
@@ -582,7 +551,7 @@ where
     }
 }
 
-#[inline]
+#[inline(always)]
 fn accumulate_result(acc: &mut u64, counter: &mut u64, result: Option<(u32, ArrayVec<u32, 4>)>) {
     if let Some((prod, pairs)) = result {
         *acc += prod as u64 + *counter + pairs.into_iter().map(|value| value as u64).sum::<u64>();
@@ -590,7 +559,7 @@ fn accumulate_result(acc: &mut u64, counter: &mut u64, result: Option<(u32, Arra
     }
 }
 
-#[inline(always)]
+#[inline(never)]
 pub fn run_iters_desc<F>(min: u32, max: u32, iters: u64, finder: F) -> (Option<u32>, u64, u64)
 where
     F: Fn(u32, u32) -> Option<(u32, ArrayVec<u32, 4>)>,
@@ -618,7 +587,7 @@ where
     (base_prod, acc, elapsed_ns)
 }
 
-#[inline(always)]
+#[inline(never)]
 pub fn run_iters_asc<F>(min: u32, max: u32, iters: u64, finder: F) -> (Option<u32>, u64, u64)
 where
     F: Fn(u32, u32) -> Option<(u32, ArrayVec<u32, 4>)>,
@@ -646,7 +615,7 @@ where
     (base_prod, acc, elapsed_ns)
 }
 
-#[inline]
+#[inline(never)]
 fn parse_u32(bytes: &[u8]) -> u32 {
     let mut v: u32 = 0;
     for &c in bytes {
@@ -655,7 +624,7 @@ fn parse_u32(bytes: &[u8]) -> u32 {
     v
 }
 
-#[inline]
+#[inline(never)]
 fn parse_u64(bytes: &[u8]) -> u64 {
     let mut v: u64 = 0;
     for &c in bytes {
@@ -665,7 +634,7 @@ fn parse_u64(bytes: &[u8]) -> u64 {
 }
 
 // Append decimal without allocation; returns bytes written
-#[inline]
+#[inline(never)]
 fn append_u32(dst: &mut [u8], mut v: u32) -> usize {
     if v == 0 {
         dst[0] = b'0';
@@ -685,7 +654,7 @@ fn append_u32(dst: &mut [u8], mut v: u32) -> usize {
     i
 }
 
-#[inline]
+#[inline(never)]
 fn append_u64(dst: &mut [u8], mut v: u64) -> usize {
     if v == 0 {
         dst[0] = b'0';
@@ -793,11 +762,6 @@ mod tests {
     fn even_not_div_11() {
         // even digits that don't % 11
         assert!(!is_pal(123_456));
-    }
-
-    #[test]
-    fn odd_length_pal() {
-        assert!(is_pal(10_988_901));
     }
 
     #[test]
