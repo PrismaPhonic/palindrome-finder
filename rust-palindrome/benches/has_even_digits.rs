@@ -16,7 +16,10 @@ use palprod_rust::{
 };
 use std::simd::Simd;
 use std::{collections::HashSet, num::NonZeroU32};
-use std::{env, time::Duration};
+use std::{
+    env,
+    time::{Duration, Instant},
+};
 
 const SIMD_BATCH: usize = 8;
 
@@ -97,23 +100,162 @@ fn is_pal_digit_dispatch(n: u32) -> bool {
     if n < 10 {
         return true;
     }
+
     if n.is_multiple_of(10) {
         return false;
     }
 
     let digits = digits_length(n);
-    if (digits & 1) == 0 && !n.is_multiple_of(11) {
+
+    if digits == 2 {
+        return n.is_multiple_of(11);
+    }
+
+    if digits == 4 {
+        if !n.is_multiple_of(11) {
+            return false;
+        }
+
+        let mut rev = n % 10;
+        let mut m = n / 10;
+        rev = rev * 10 + (m % 10);
+        m /= 10;
+        return m == rev;
+    }
+
+    if digits == 6 {
+        if !n.is_multiple_of(11) {
+            return false;
+        }
+
+        let mut rev = n % 10;
+        let mut m = n / 10;
+        rev = rev * 10 + (m % 10);
+        m /= 10;
+        rev = rev * 10 + (m % 10);
+        m /= 10;
+        return m == rev;
+    }
+
+    let mut rev = n % 10;
+    let mut m = n / 10;
+
+    if digits == 5 {
+        rev = rev * 10 + (m % 10);
+        m /= 10;
+    }
+
+    m == rev / 10
+}
+
+#[inline(always)]
+pub fn is_pal_old(n: u32) -> bool {
+    if n < 10 {
+        return true;
+    }
+    // Non-zero numbers ending in 0 cannot be palindromes.
+    if n.is_multiple_of(10) {
         return false;
     }
 
-    match digits {
-        2 => pal_helper_2_digit(n),
-        3 => pal_helper_3_digit(n),
-        4 => pal_helper_4_digit(n),
-        5 => pal_helper_5_digit(n),
-        6 => pal_helper_6_digit(n),
-        _ => false,
+    // Even-length palindromes must be divisible by 11.
+    if has_even_digits(n) && !n.is_multiple_of(11) {
+        return false;
     }
+
+    // Half-reverse
+    let mut m = n;
+    let mut rev: u32 = 0;
+    while m > rev {
+        rev = rev * 10 + m % 10;
+        m /= 10;
+    }
+
+    m == rev || m == rev / 10
+}
+
+#[inline(always)]
+pub fn is_pal_upto_6(n: u32) -> bool {
+    // 1 digit
+    if n < 10 {
+        return true;
+    }
+
+    // First peel once and reuse everywhere
+    // We would have to check trailing zeros anyways and LLVM will fuse these
+    // into a single magic constant based instruction.
+    let mut rev = n % 10;
+    let mut m = n / 10;
+
+    // Non-zero numbers ending with 0 cannot be palindromes.
+    if rev == 0 {
+        return false;
+    }
+
+    if n < 100 {
+        // 2 digits
+        return m == rev;
+    }
+
+    // Second peel
+    rev = rev * 10 + (m % 10);
+    m /= 10;
+
+    if n < 10_000 {
+        // 3 or 4 digits.
+        return m == rev || m == rev / 10;
+    }
+
+    // 3rd peel
+    rev = rev * 10 + (m % 10);
+    m /= 10;
+
+    m == rev || m == rev / 10
+}
+
+#[inline(always)]
+#[allow(clippy::manual_is_multiple_of)]
+pub fn is_pal_iter_v2(n: u32) -> bool {
+    // 1 digit
+    if n < 10 {
+        return true;
+    }
+
+    // First peel once and reuse everywhere
+    // We would have to check trailing zeros anyways and LLVM will fuse these
+    // into a single magic constant based instruction.
+    let mut rev = n % 10;
+    let mut m = n / 10;
+
+    // Non-zero numbers ending with 0 cannot be palindromes.
+    if rev == 0 {
+        return false;
+    }
+
+    if n < 100 {
+        // 2 digits
+        return m == rev;
+    }
+
+    let ge1k = (n >= 1_000) as u8;
+    let ge10k = (n >= 10_000) as u8;
+    let ge100k = (n >= 100_000) as u8;
+    let parity = ge1k ^ ge10k ^ ge100k;
+
+    if parity == 1 && n % 11 != 0 {
+        return false;
+    }
+
+    loop {
+        rev = rev * 10 + (m % 10);
+        m /= 10;
+
+        if m <= rev {
+            break;
+        }
+    }
+
+    m == rev || m == rev / 10
 }
 
 #[inline(always)]
@@ -156,24 +298,39 @@ pub fn pal_half_reverse_unrolled(n: u32) -> bool {
 
 #[inline(always)]
 pub fn is_pal_flipped(n: u32) -> bool {
-    // if n < 10 {
-    //     return true;
-    // }
-
-    // // Even-length palindromes must be divisible by 11.
-    // if has_even_digits(n) && !n.is_multiple_of(11) {
-    //     return false;
-    // }
+    if n < 10 {
+        return true;
+    }
 
     // Non-zero numbers ending in 0 cannot be palindromes.
     if n.is_multiple_of(10) {
         return false;
     }
 
+    // Even-length palindromes must be divisible by 11.
+    let length = has_even_digits_length(n);
+    let is_even = length.is_multiple_of(2);
+    if is_even && !n.is_multiple_of(11) {
+        return false;
+    }
+
     // Half-reverse
     let mut m = n;
     let mut rev: u32 = 0;
-    while m > rev {
+
+    // We already verified we are 2 digits or higher, so we must have at least
+    // one reverse.
+    rev = rev * 10 + m % 10;
+    m /= 10;
+    if m <= rev {
+        // even length
+        return m == rev;
+    }
+
+    rev = rev * 10 + m % 10;
+    m /= 10;
+
+    if m > rev {
         rev = rev * 10 + m % 10;
         m /= 10;
     }
@@ -231,6 +388,17 @@ pub fn has_even_digits_parity_new(n: u32) -> bool {
     parity == 1
 }
 
+#[inline(always)]
+pub fn has_even_digits_length(n: u32) -> u32 {
+    let cmp_a = (n >= 100) as u32;
+    let cmp_b = (n >= 1_000) as u32;
+    let cmp_c = (n >= 10_000) as u32;
+    let cmp_d = (n >= 100_000) as u32;
+    let t0 = cmp_a + cmp_b;
+    let t1 = cmp_c + cmp_d;
+    2 + (t0 + t1)
+}
+
 fn input_numbers() -> Vec<u32> {
     // Cover 1-digit through 9-digit numbers (inclusive) with uniform density.
     // 999_999 numbers keep the benchmark realistic without being too slow.
@@ -245,6 +413,27 @@ fn palindrome_inputs() -> Vec<u32> {
         .collect();
     let mut vec: Vec<u32> = set.into_iter().collect();
     vec.sort();
+    // let len = vec.len();
+    // let rem = len % SIMD_BATCH;
+    // let mut fill = SIMD_BATCH - rem;
+    // let mut first_element_to_fill = (vec.len() / 2) - 1;
+    // let mut second_element_to_fill = (vec.len() / 4) - 1;
+    // while fill > 0 {
+    //     vec.push(vec[first_element_to_fill]);
+    //     vec.push(vec[second_element_to_fill]);
+    //     fill -= 2;
+    //     first_element_to_fill += 2;
+    //     second_element_to_fill += 2;
+    // }
+    // if fill == 1 {
+    //     vec.push(vec[first_element_to_fill]);
+    //     fill -= 1;
+    // }
+    // if !vec.len().is_multiple_of(SIMD_BATCH) {
+    //     let rem = vec.len() % SIMD_BATCH;
+    //     panic!("Paldindrome inputs not multiple of SIMD_BATCH: remainder: {rem}; fill: {fill}");
+    // }
+    // println!("Generated palindrome inputs");
     vec
 }
 
@@ -358,19 +547,55 @@ fn bench_palindrome_checks(c: &mut Criterion) {
             b.iter(|| {
                 let mut acc = 0u32;
                 for &n in &inputs {
-                    acc += is_pal(black_box(n)) as u32;
+                    acc += is_pal_old(black_box(n)) as u32;
                 }
                 black_box(acc)
             });
         });
     }
 
-    if should_run("is_pal_lut") {
-        c.bench_function("is_pal_lut", |b| {
+    if should_run("is_pal_iterative_v2") {
+        c.bench_function("is_pal_iterative_v2", |b| {
             b.iter(|| {
                 let mut acc = 0u32;
                 for &n in &inputs {
-                    acc += is_pal(black_box(n)) as u32;
+                    acc += is_pal_iter_v2(black_box(n)) as u32;
+                }
+                black_box(acc)
+            });
+        });
+    }
+
+    if should_run("is_pal_upto_6") {
+        c.bench_function("is_pal_upto_6", |b| {
+            b.iter(|| {
+                let mut acc = 0u32;
+                for &n in &inputs {
+                    acc += is_pal_upto_6(black_box(n)) as u32;
+                }
+                black_box(acc)
+            });
+        });
+    }
+
+    if should_run("is_pal_upto_6v2") {
+        c.bench_function("is_pal_upto_6v2", |b| {
+            b.iter(|| {
+                let mut acc = 0u32;
+                for &n in &inputs {
+                    acc += is_pal_upto_6(black_box(n)) as u32;
+                }
+                black_box(acc)
+            });
+        });
+    }
+
+    if should_run("is_pal_digit_dispatch") {
+        c.bench_function("is_pal_digit_dispatch", |b| {
+            b.iter(|| {
+                let mut acc = 0u32;
+                for &n in &inputs {
+                    acc += is_pal_digit_dispatch(black_box(n)) as u32;
                 }
                 black_box(acc)
             });
@@ -417,18 +642,6 @@ fn bench_palindrome_checks(c: &mut Criterion) {
         });
     }
 
-    if should_run("is_pal_digit_dispatch") {
-        c.bench_function("is_pal_digit_dispatch", |b| {
-            b.iter(|| {
-                let mut acc = 0u32;
-                for &n in &inputs {
-                    acc += is_pal_digit_dispatch(black_box(n)) as u32;
-                }
-                black_box(acc)
-            });
-        });
-    }
-
     if should_run("is_pal_loop_unrolled") {
         c.bench_function("is_pal_digit_loop_unrolled", |b| {
             b.iter(|| {
@@ -449,7 +662,7 @@ fn bench_largest_search_products(c: &mut Criterion) {
         c.bench_function("largest_product_iterative_100_999", |b| {
             b.iter(|| {
                 let res = largest_product(black_box(nz(100)), black_box(nz(999)));
-                debug_assert_eq!(res.unwrap().0, expected);
+                debug_assert_eq!(res.unwrap(), expected);
                 black_box(res)
             });
         });
@@ -469,7 +682,7 @@ fn bench_largest_search_products(c: &mut Criterion) {
         c.bench_function("largest_product_simd_100_999", |b| {
             b.iter(|| {
                 let res = largest_product_simd(black_box(100), black_box(999));
-                debug_assert_eq!(res.unwrap().0, expected.get());
+                debug_assert_eq!(res.unwrap(), expected.get());
                 black_box(res)
             });
         });
@@ -541,7 +754,7 @@ fn bench_smallest_search_products(c: &mut Criterion) {
         c.bench_function("smallest_product_iterative_910_999", |b| {
             b.iter(|| {
                 let res = smallest_product(black_box(nz(910)), black_box(nz(999)));
-                debug_assert_eq!(res.unwrap().0, nz(expected.unwrap()));
+                debug_assert_eq!(res.unwrap(), nz(expected.unwrap()));
                 black_box(res)
             });
         });
@@ -561,7 +774,7 @@ fn bench_smallest_search_products(c: &mut Criterion) {
         c.bench_function("smallest_product_simd_910_999", |b| {
             b.iter(|| {
                 let res = smallest_product_simd(black_box(910), black_box(999));
-                debug_assert_eq!(res.unwrap().0, expected.unwrap());
+                debug_assert_eq!(res.unwrap(), expected.unwrap());
                 black_box(res)
             });
         });
