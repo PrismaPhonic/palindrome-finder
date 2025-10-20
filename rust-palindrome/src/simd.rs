@@ -4,7 +4,7 @@ use std::simd::cmp::{SimdPartialEq, SimdPartialOrd};
 use std::simd::num::SimdUint;
 use std::simd::{LaneCount, Mask, Simd, SupportedLaneCount};
 
-use crate::collections::PalOut;
+use crate::collections::{PalOut, Scratch};
 use crate::{divrem_u32_magic, is_pal};
 
 const SIMD_WIDTH: usize = 8;
@@ -15,52 +15,6 @@ const SCRATCH_CAPACITY: usize = SIMD_WIDTH * 2;
 
 type SimdMask<const LANES: usize> = Mask<i32, LANES>;
 type SimdU32<const LANES: usize> = Simd<u32, LANES>;
-
-#[repr(align(64))]
-struct AlignedBuf<const CAP: usize>([u32; CAP]);
-
-#[repr(C)]
-struct Scratch<const CAP: usize> {
-    buf: AlignedBuf<CAP>, // starts at offset 0, 64 aligned.
-    head: usize,          // at offset 64
-    len: usize,           // at offset 72
-}
-
-impl<const CAP: usize> Scratch<CAP> {
-    const MASK: usize = CAP - 1;
-
-    #[inline(always)]
-    fn new() -> Self {
-        Self {
-            buf: AlignedBuf([0; CAP]),
-            head: 0,
-            len: 0,
-        }
-    }
-
-    #[inline(always)]
-    fn clear(&mut self) {
-        self.head = 0;
-        self.len = 0;
-    }
-
-    #[inline(always)]
-    fn free(&self) -> usize {
-        CAP - self.len
-    }
-
-    #[inline(always)]
-    fn tail_start(&self) -> usize {
-        debug_assert!(CAP.is_power_of_two());
-        (self.head + self.len) & Self::MASK
-    }
-
-    #[inline(always)]
-    fn commit_batch(&mut self, added: usize) {
-        debug_assert!(self.len + added <= CAP);
-        self.len += added;
-    }
-}
 
 #[inline(always)]
 fn div_mod_u32_const_portable<const LANES: usize>(
@@ -336,41 +290,6 @@ where
     process_compact_full_lane_ptr(scratch)
 }
 
-// Very efficient packing of scratch based on bitmask, which removes bounds
-// checking, which in turn allows llvm to better optimize this with automatic
-// loop unrolling.
-// #[inline(always)]
-// fn pack_scratch_from_bitmask<const LANES: usize>(
-//     bits: u64,
-//     prod: SimdU32<LANES>,
-//     scratch: &mut ArrayVec<u32, SCRATCH_CAPACITY>,
-// ) where
-//     LaneCount<LANES>: SupportedLaneCount,
-// {
-//     let mut m = bits;
-//     let mut len = scratch.len();
-//     let need = m.count_ones() as usize;
-
-//     // Improves performance by removing bounds checking in the loop.
-//     assert!(len + need <= scratch.capacity());
-
-//     let ptr = scratch.as_mut_ptr();
-
-//     while m != 0 {
-//         let lane = m.trailing_zeros() as usize;
-//         m &= m - 1;
-//         unsafe {
-//             *ptr.add(len) = prod[lane];
-//             len += 1;
-//         }
-//     }
-
-//     // single header write at exit
-//     unsafe {
-//         scratch.set_len(len);
-//     }
-// }
-
 #[inline(always)]
 fn pack_scratch_from_bitmask<const LANES: usize>(
     mut bits: u64,
@@ -578,92 +497,6 @@ pub fn is_pal_half_reverse(n: u32) -> bool {
 
     m == rev || m == rev / 10
 }
-
-// #[inline(always)]
-// pub fn process_compact_until_done_ptr(values: &[u32]) -> Option<u32> {
-//     let mut off = 0;
-//     let len = values.len();
-
-//     if len - off >= 8 {
-//         unsafe {
-//             let v = Simd::<u32, 8>::from_array(ptr::read_unaligned(
-//                 values.as_ptr().add(off) as *const [u32; 8]
-//             ));
-//             let mask = is_pal_simd_mask_generic(v);
-//             if mask.any() {
-//                 let lane = mask.to_bitmask().trailing_zeros() as usize;
-//                 return Some(ptr::read_unaligned(values.as_ptr().add(off + lane)));
-//             }
-//             off += 8;
-//         }
-//     }
-//     if len - off >= 4 {
-//         unsafe {
-//             let v = Simd::<u32, 4>::from_array(ptr::read_unaligned(
-//                 values.as_ptr().add(off) as *const [u32; 4]
-//             ));
-//             let mask = is_pal_simd_mask_generic(v);
-//             if mask.any() {
-//                 let lane = mask.to_bitmask().trailing_zeros() as usize;
-//                 return Some(ptr::read_unaligned(values.as_ptr().add(off + lane)));
-//             }
-//             off += 4;
-//         }
-//     }
-//     if len - off >= 2 {
-//         unsafe {
-//             let v = Simd::<u32, 2>::from_array(ptr::read_unaligned(
-//                 values.as_ptr().add(off) as *const [u32; 2]
-//             ));
-//             let mask = is_pal_simd_mask_generic(v);
-//             if mask.any() {
-//                 let lane = mask.to_bitmask().trailing_zeros() as usize;
-//                 return Some(ptr::read_unaligned(values.as_ptr().add(off + lane)));
-//             }
-//             off += 2;
-//         }
-//     }
-//     if off < len {
-//         let x = unsafe { ptr::read_unaligned(values.as_ptr().add(off)) };
-//         if is_pal_half_reverse(x) {
-//             return Some(x);
-//         }
-//     }
-//     None
-// }
-
-// #[inline(always)]
-// fn process_compact_full_lane_ptr(values: &mut ArrayVec<u32, SCRATCH_CAPACITY>) -> Option<u32> {
-//     let len = values.len();
-//     if len < SIMD_WIDTH {
-//         return None; // caller can invoke unconditionally
-//     }
-
-//     // Load first full lane without creating a [..8] slice.
-//     let v = unsafe {
-//         let p = values.as_ptr() as *const [u32; SIMD_WIDTH];
-//         Simd::<u32, SIMD_WIDTH>::from_array(ptr::read_unaligned(p))
-//     };
-
-//     let mask = is_pal_simd_mask_generic(v);
-
-//     // Grab the winning scalar from the backing buffer (avoid vec[lane] bounds check).
-//     let found = if mask.any() {
-//         let lane = mask.to_bitmask().trailing_zeros() as usize;
-//         Some(unsafe { *values.as_ptr().add(lane) })
-//     } else {
-//         None
-//     };
-
-//     // Consume the lane with a single move.
-//     unsafe {
-//         let p = values.as_mut_ptr();
-//         ptr::copy(p.add(SIMD_WIDTH), p, len - SIMD_WIDTH);
-//         values.set_len(len - SIMD_WIDTH);
-//     }
-
-//     found
-// }
 
 #[inline(always)]
 fn process_compact_full_lane_ptr<const CAP: usize>(scratch: &mut Scratch<CAP>) -> Option<u32> {

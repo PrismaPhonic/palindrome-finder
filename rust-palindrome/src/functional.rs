@@ -64,7 +64,7 @@ pub fn collect_factor_pairs(product: u32, min: NonZeroU32, max: NonZeroU32) -> F
 
     // Verified for bounds [1, 999] inclusive (both smallest and largest):
     // the factor-pair list never exceeds 4 slots (2 pairs).
-    let mut result = FactorBuf::default();
+    let mut result = FactorBuf::new();
     collect_pairs_recursive(product, low, high, &mut result);
     result
 }

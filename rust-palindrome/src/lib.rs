@@ -275,7 +275,7 @@ pub fn collect_factor_pairs(product: NonZeroU32, min: NonZeroU32, max: NonZeroU3
     // Verified for bounds [1, 999] inclusive (both smallest and largest):
     // the factor-pair list never exceeds 4 slots (2 pairs). Using capacity=4
     // improves cache usage and reduces stack footprint for this benchmark scope.
-    let mut out = FactorBuf::default();
+    let mut out = FactorBuf::new();
     let mut len = 0usize;
     let ptr = out.as_mut_ptr();
 
