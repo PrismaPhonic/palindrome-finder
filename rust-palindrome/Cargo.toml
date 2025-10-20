@@ -41,9 +41,6 @@ debug = false
 # BOLT requires symbols; do not strip in release
 strip = false
 
-[dependencies]
-arrayvec = "0.7.6"
-
 [dev-dependencies]
 criterion = "0.5"
 

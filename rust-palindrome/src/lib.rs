@@ -60,8 +60,9 @@ use std::io::{BufRead, BufReader, Write};
 use std::num::NonZeroU32;
 use std::time::Instant;
 
-use arrayvec::ArrayVec;
+use collections::{FactorBuf, PalOut};
 
+pub mod collections;
 pub mod functional;
 pub mod simd;
 
@@ -248,25 +249,21 @@ pub fn is_multiple_of_magic(n: u32, d: u32) -> bool {
 // builds.
 // Returns true when full.
 #[inline(always)]
-unsafe fn push_pair_unchecked_is_full(out: &mut ArrayVec<u32, 4>, x: u32, y: u32) -> bool {
+unsafe fn push_pair_unchecked_is_full(out: &mut FactorBuf, x: u32, y: u32) -> bool {
     debug_assert!(out.len() <= 2);
     let len = out.len();
     let ptr = out.as_mut_ptr();
     unsafe {
         core::ptr::write(ptr.add(len), x);
         core::ptr::write(ptr.add(len + 1), y);
-        out.set_len(len + 2);
     }
+    out.set_len(len + 2);
     // Len was previously 2, so it's now 4 and we are full.
     len == 2
 }
 
 #[inline]
-pub fn collect_factor_pairs(
-    product: NonZeroU32,
-    min: NonZeroU32,
-    max: NonZeroU32,
-) -> ArrayVec<u32, 4> {
+pub fn collect_factor_pairs(product: NonZeroU32, min: NonZeroU32, max: NonZeroU32) -> FactorBuf {
     let product = product.get();
     let min = min.get();
     let max = max.get();
@@ -278,7 +275,7 @@ pub fn collect_factor_pairs(
     // Verified for bounds [1, 999] inclusive (both smallest and largest):
     // the factor-pair list never exceeds 4 slots (2 pairs). Using capacity=4
     // improves cache usage and reduces stack footprint for this benchmark scope.
-    let mut out: ArrayVec<u32, 4> = ArrayVec::new_const();
+    let mut out = FactorBuf::default();
     let mut len = 0usize;
     let ptr = out.as_mut_ptr();
 
@@ -298,7 +295,6 @@ pub fn collect_factor_pairs(
         x += 1;
     }
 
-    unsafe { out.set_len(len) };
     out
 }
 
@@ -370,12 +366,12 @@ pub fn smallest_product(min: NonZeroU32, max: NonZeroU32) -> Option<NonZeroU32> 
 }
 
 #[inline]
-pub fn smallest(min: u32, max: u32) -> Option<(u32, ArrayVec<u32, 4>)> {
+pub fn smallest(min: u32, max: u32) -> Option<PalOut> {
     let min = unsafe { NonZeroU32::new_unchecked(min) };
     let max = unsafe { NonZeroU32::new_unchecked(max) };
     smallest_product(min, max).map(|product| {
         let factor_pairs = collect_factor_pairs(product, min, max);
-        (product.into(), factor_pairs)
+        factor_pairs.with_product(product.into())
     })
 }
 
@@ -442,12 +438,12 @@ pub fn largest_product(min: NonZeroU32, max: NonZeroU32) -> Option<NonZeroU32> {
 }
 
 #[inline]
-pub fn largest(min: u32, max: u32) -> Option<(u32, ArrayVec<u32, 4>)> {
+pub fn largest(min: u32, max: u32) -> Option<PalOut> {
     let min = unsafe { NonZeroU32::new_unchecked(min) };
     let max = unsafe { NonZeroU32::new_unchecked(max) };
     largest_product(min, max).map(|product| {
         let factor_pairs = collect_factor_pairs(product, min, max);
-        (product.into(), factor_pairs)
+        factor_pairs.with_product(product.into())
     })
 }
 
@@ -552,9 +548,9 @@ where
 }
 
 #[inline(always)]
-fn accumulate_result(acc: &mut u64, counter: &mut u64, result: Option<(u32, ArrayVec<u32, 4>)>) {
-    if let Some((prod, pairs)) = result {
-        *acc += prod as u64 + *counter + pairs.into_iter().map(|value| value as u64).sum::<u64>();
+fn accumulate_result(acc: &mut u64, counter: &mut u64, result: Option<PalOut>) {
+    if let Some(out) = result {
+        *acc += *counter + out.consume();
         *counter += 1;
     }
 }
@@ -562,9 +558,9 @@ fn accumulate_result(acc: &mut u64, counter: &mut u64, result: Option<(u32, Arra
 #[inline(never)]
 pub fn run_iters_desc<F>(min: u32, max: u32, iters: u64, finder: F) -> (Option<u32>, u64, u64)
 where
-    F: Fn(u32, u32) -> Option<(u32, ArrayVec<u32, 4>)>,
+    F: Fn(u32, u32) -> Option<PalOut>,
 {
-    let base_prod = finder(min, max).map(|(product, _)| product);
+    let base_prod = finder(min, max).map(|pal_out| pal_out.product);
 
     let mut acc: u64 = 0;
     let mut counter: u64 = 0;
@@ -590,9 +586,9 @@ where
 #[inline(never)]
 pub fn run_iters_asc<F>(min: u32, max: u32, iters: u64, finder: F) -> (Option<u32>, u64, u64)
 where
-    F: Fn(u32, u32) -> Option<(u32, ArrayVec<u32, 4>)>,
+    F: Fn(u32, u32) -> Option<PalOut>,
 {
-    let base_prod = finder(min, max).map(|(product, _)| product);
+    let base_prod = finder(min, max).map(|pal_out| pal_out.product);
 
     let mut acc: u64 = 0;
     let mut counter: u64 = 0;
@@ -683,18 +679,17 @@ mod tests {
         out
     }
 
-    fn assert_some_eq(
-        got: Option<(u32, ArrayVec<u32, 4>)>,
-        expect_p: u32,
-        expect_factors: &[(u32, u32)],
-    ) {
-        let (p, f) = got.expect("expected Some(..), got None");
+    fn assert_some_eq(got: Option<PalOut>, expect_p: u32, expect_factors: &[(u32, u32)]) {
+        let PalOut {
+            product: p,
+            pairs: f,
+        } = got.expect("expected Some(..), got None");
         assert_eq!(p, expect_p, "product mismatch");
 
         // Convert flat array to pairs for comparison
         let mut pairs = Vec::new();
         for i in (0..f.len()).step_by(2) {
-            if i + 1 < f.len() {
+            if i + 1 < f.len() && f[i] != 0 {
                 pairs.push((f[i], f[i + 1]));
             }
         }
@@ -707,15 +702,18 @@ mod tests {
 
     #[test]
     fn test_smallest() {
-        let (product, factors) = smallest(910, 999).unwrap();
+        let PalOut { product, pairs } = smallest(910, 999).unwrap();
         assert_eq!(product, 861168);
-        assert_eq!(factors[0], 924);
-        assert_eq!(factors[1], 932);
+        assert_eq!(pairs[0], 924);
+        assert_eq!(pairs[1], 932);
     }
 
     #[test]
     fn largest_910_999() {
-        let (p, f) = largest(910, 999).unwrap();
+        let PalOut {
+            product: p,
+            pairs: f,
+        } = largest(910, 999).unwrap();
         assert_eq!(p, 906_609);
         // Check if (913, 993) is in the flat array
         let mut found = false;
@@ -730,7 +728,10 @@ mod tests {
 
     #[test]
     fn largest_100_999() {
-        let (p, f) = largest(100, 999).unwrap();
+        let PalOut {
+            product: p,
+            pairs: f,
+        } = largest(100, 999).unwrap();
         assert_eq!(p, 906_609);
         // Check if (913, 993) is in the flat array
         let mut found = false;
@@ -831,7 +832,7 @@ mod tests {
         let limit = 999u32;
         let max_len = (1..=limit)
             .filter_map(|current_min| {
-                smallest(current_min, limit).map(|(product, pairs)| {
+                smallest(current_min, limit).map(|PalOut { product, pairs }| {
                     let len = pairs.len();
                     if len == 4 {
                         println!(
@@ -852,7 +853,9 @@ mod tests {
         let limit = 999u32;
         let max_len = (1..=limit)
             .rev()
-            .filter_map(|current_max| largest(1u32, current_max).map(|(_, pairs)| pairs.len()))
+            .filter_map(|current_max| {
+                largest(1u32, current_max).map(|PalOut { product: _, pairs }| pairs.len())
+            })
             .max()
             .unwrap_or(0);
         assert_eq!(max_len, 4, "observed max_len = {}", max_len);

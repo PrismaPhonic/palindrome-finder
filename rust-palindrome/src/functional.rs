@@ -6,8 +6,10 @@
 
 use std::num::NonZeroU32;
 
-use crate::{divrem_u32_magic, has_even_digits, push_pair_unchecked_is_full};
-use arrayvec::ArrayVec;
+use crate::{
+    collections::{FactorBuf, PalOut},
+    divrem_u32_magic, has_even_digits, push_pair_unchecked_is_full,
+};
 
 const NO_HIT_SMALLEST: u32 = u32::MAX;
 const NO_HIT_LARGEST: u32 = 0;
@@ -51,7 +53,7 @@ fn half_reverse_loop(m: u32, rev: u32) -> bool {
 /// Functional recursive factor pair collection
 /// Mirrors the Haskell `collectPositiveFactorPairs` function
 #[inline(always)]
-pub fn collect_factor_pairs(product: u32, min: NonZeroU32, max: NonZeroU32) -> ArrayVec<u32, 4> {
+pub fn collect_factor_pairs(product: u32, min: NonZeroU32, max: NonZeroU32) -> FactorBuf {
     let min = min.get();
     let max = max.get();
 
@@ -62,13 +64,13 @@ pub fn collect_factor_pairs(product: u32, min: NonZeroU32, max: NonZeroU32) -> A
 
     // Verified for bounds [1, 999] inclusive (both smallest and largest):
     // the factor-pair list never exceeds 4 slots (2 pairs).
-    let mut result: ArrayVec<u32, 4> = ArrayVec::new_const();
+    let mut result = FactorBuf::default();
     collect_pairs_recursive(product, low, high, &mut result);
     result
 }
 
 #[inline(always)]
-fn collect_pairs_recursive(product: u32, x: u32, high: u32, result: &mut ArrayVec<u32, 4>) {
+fn collect_pairs_recursive(product: u32, x: u32, high: u32, result: &mut FactorBuf) {
     if x > high {
         return;
     }
@@ -161,26 +163,22 @@ fn search_largest(x: u32, min: u32, max: u32, best: u32) -> Option<u32> {
 }
 
 #[inline(always)]
-pub fn smallest_functional(min: u32, max: u32) -> Option<(u32, ArrayVec<u32, 4>)> {
+pub fn smallest_functional(min: u32, max: u32) -> Option<PalOut> {
     smallest_product_functional(min, max).map(|product| {
-        (
-            product,
-            collect_factor_pairs(product, unsafe { NonZeroU32::new_unchecked(min) }, unsafe {
-                NonZeroU32::new_unchecked(max)
-            }),
-        )
+        collect_factor_pairs(product, unsafe { NonZeroU32::new_unchecked(min) }, unsafe {
+            NonZeroU32::new_unchecked(max)
+        })
+        .with_product(product)
     })
 }
 
 #[inline(always)]
-pub fn largest_functional(min: u32, max: u32) -> Option<(u32, ArrayVec<u32, 4>)> {
+pub fn largest_functional(min: u32, max: u32) -> Option<PalOut> {
     largest_product_functional(min, max).map(|product| {
-        (
-            product,
-            collect_factor_pairs(product, unsafe { NonZeroU32::new_unchecked(min) }, unsafe {
-                NonZeroU32::new_unchecked(max)
-            }),
-        )
+        collect_factor_pairs(product, unsafe { NonZeroU32::new_unchecked(min) }, unsafe {
+            NonZeroU32::new_unchecked(max)
+        })
+        .with_product(product)
     })
 }
 
@@ -217,18 +215,17 @@ mod tests {
         out
     }
 
-    fn assert_some_eq(
-        got: Option<(u32, ArrayVec<u32, 4>)>,
-        expect_p: u32,
-        expect_factors: &[(u32, u32)],
-    ) {
-        let (p, f) = got.expect("expected Some(..), got None");
+    fn assert_some_eq(got: Option<PalOut>, expect_p: u32, expect_factors: &[(u32, u32)]) {
+        let PalOut {
+            product: p,
+            pairs: f,
+        } = got.expect("expected Some(..), got None");
         assert_eq!(p, expect_p, "product mismatch");
 
         // Convert flat array to pairs for comparison
         let mut pairs = Vec::new();
         for i in (0..f.len()).step_by(2) {
-            if i + 1 < f.len() {
+            if i + 1 < f.len() && f[i] != 0 {
                 pairs.push((f[i], f[i + 1]));
             }
         }
@@ -241,7 +238,10 @@ mod tests {
 
     #[test]
     fn test_smallest_functional() {
-        let (product, factors) = smallest_functional(910, 999).unwrap();
+        let PalOut {
+            product,
+            pairs: factors,
+        } = smallest_functional(910, 999).unwrap();
         assert_eq!(product, 861168);
         assert_eq!(factors[0], 924);
         assert_eq!(factors[1], 932);
@@ -249,7 +249,10 @@ mod tests {
 
     #[test]
     fn largest_910_999_functional() {
-        let (p, f) = largest_functional(910, 999).unwrap();
+        let PalOut {
+            product: p,
+            pairs: f,
+        } = largest_functional(910, 999).unwrap();
         assert_eq!(p, 906_609);
         // Check if (913, 993) is in the flat array
         let mut found = false;
@@ -264,7 +267,10 @@ mod tests {
 
     #[test]
     fn largest_100_999_functional() {
-        let (p, f) = largest_functional(100, 999).unwrap();
+        let PalOut {
+            product: p,
+            pairs: f,
+        } = largest_functional(100, 999).unwrap();
         assert_eq!(p, 906_609);
         // Check if (913, 993) is in the flat array
         let mut found = false;

@@ -1,10 +1,10 @@
 use std::num::NonZeroU32;
 
-use arrayvec::ArrayVec;
 use std::simd::cmp::{SimdPartialEq, SimdPartialOrd};
 use std::simd::num::SimdUint;
 use std::simd::{LaneCount, Mask, Simd, SupportedLaneCount};
 
+use crate::collections::PalOut;
 use crate::{divrem_u32_magic, is_pal};
 
 const SIMD_WIDTH: usize = 8;
@@ -292,14 +292,14 @@ pub fn smallest_product(min: u32, max: u32) -> Option<u32> {
 }
 
 #[inline]
-pub fn smallest(min: u32, max: u32) -> Option<(u32, ArrayVec<u32, 4>)> {
+pub fn smallest(min: u32, max: u32) -> Option<PalOut> {
     smallest_product(min, max).map(|product| {
         let factor_pairs = crate::collect_factor_pairs(
             unsafe { NonZeroU32::new_unchecked(product) },
             unsafe { NonZeroU32::new_unchecked(min) },
             unsafe { NonZeroU32::new_unchecked(max) },
         );
-        (product, factor_pairs)
+        factor_pairs.with_product(product)
     })
 }
 
@@ -556,14 +556,14 @@ pub fn largest_product(min: u32, max: u32) -> Option<u32> {
 }
 
 #[inline(never)]
-pub fn largest(min: u32, max: u32) -> Option<(u32, ArrayVec<u32, 4>)> {
+pub fn largest(min: u32, max: u32) -> Option<PalOut> {
     largest_product(min, max).map(|product| {
         let factor_pairs = crate::collect_factor_pairs(
             unsafe { NonZeroU32::new_unchecked(product) },
             unsafe { NonZeroU32::new_unchecked(min) },
             unsafe { NonZeroU32::new_unchecked(max) },
         );
-        (product, factor_pairs)
+        factor_pairs.with_product(product)
     })
 }
 
@@ -816,18 +816,17 @@ mod tests {
         out
     }
 
-    fn assert_some_eq(
-        got: Option<(u32, ArrayVec<u32, 4>)>,
-        expect_p: u32,
-        expect_factors: &[(u32, u32)],
-    ) {
-        let (p, f) = got.expect("expected Some(..), got None");
+    fn assert_some_eq(got: Option<PalOut>, expect_p: u32, expect_factors: &[(u32, u32)]) {
+        let PalOut {
+            product: p,
+            pairs: f,
+        } = got.expect("expected Some(..), got None");
         assert_eq!(p, expect_p, "product mismatch");
 
         // Convert flat array to pairs for comparison
         let mut pairs = Vec::new();
         for i in (0..f.len()).step_by(2) {
-            if i + 1 < f.len() {
+            if i + 1 < f.len() && f[i] != 0 {
                 pairs.push((f[i], f[i + 1]));
             }
         }
@@ -840,7 +839,10 @@ mod tests {
 
     #[test]
     fn test_smallest() {
-        let (product, factors) = smallest(910, 999).unwrap();
+        let PalOut {
+            product,
+            pairs: factors,
+        } = smallest(910, 999).unwrap();
         assert_eq!(product, 861168);
         assert_eq!(factors[0], 924);
         assert_eq!(factors[1], 932);
@@ -848,7 +850,10 @@ mod tests {
 
     #[test]
     fn largest_910_999() {
-        let (p, f) = largest(910, 999).unwrap();
+        let PalOut {
+            product: p,
+            pairs: f,
+        } = largest(910, 999).unwrap();
         assert_eq!(p, 906_609);
         // Check if (913, 993) is in the flat array
         let mut found = false;
@@ -863,7 +868,10 @@ mod tests {
 
     #[test]
     fn largest_100_999() {
-        let (p, f) = largest(100, 999).unwrap();
+        let PalOut {
+            product: p,
+            pairs: f,
+        } = largest(100, 999).unwrap();
         assert_eq!(p, 906_609);
         // Check if (913, 993) is in the flat array
         let mut found = false;
