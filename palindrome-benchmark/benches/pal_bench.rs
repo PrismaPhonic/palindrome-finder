@@ -154,8 +154,8 @@ pub fn benches(c: &mut Criterion) {
     let haskell_sm = "../target-bin/palprod-haskell-smallest";
     let coalton_lg = "../target-bin/palprod-coalton-largest";
     let coalton_sm = "../target-bin/palprod-coalton-smallest";
-    let python_lg = "../target-bin/palprod-python-largest";
-    let python_sm = "../target-bin/palprod-python-smallest";
+    // let python_lg = "../target-bin/palprod-python-largest";
+    // let python_sm = "../target-bin/palprod-python-smallest";
     let pypy_lg = "../target-bin/palprod-py-largest";
     let pypy_sm = "../target-bin/palprod-py-smallest";
     let deno_lg = "../target-bin/palprod-deno-largest";
@@ -163,20 +163,8 @@ pub fn benches(c: &mut Criterion) {
     let bun_lg = "../target-bin/palprod-bun-largest";
     let bun_sm = "../target-bin/palprod-bun-smallest";
 
-    bench_servered(c, "Deno largest 2..999", deno_lg, 2, 999);
-    bench_servered(c, "Deno smallest 2..999", deno_sm, 2, 999);
-
-    bench_servered(c, "Bun largest 2..999", bun_lg, 2, 999);
-    bench_servered(c, "Bun smallest 2..999", bun_sm, 2, 999);
-
-    bench_servered(c, "PyPy largest 2..999", pypy_lg, 2, 999);
-    bench_servered(c, "PyPy smallest 2..999", pypy_sm, 2, 999);
-
-    bench_servered(c, "Python largest 2..999", python_lg, 2, 999);
-    bench_servered(c, "Python smallest 2..999", python_sm, 2, 999);
-
-    bench_servered(c, "RUST               largest 2..999", rust_lg, 2, 999);
     bench_servered(c, "RUST               smallest 2..999", rust_sm, 2, 999);
+    bench_servered(c, "RUST               largest 2..999", rust_lg, 2, 999);
 
     bench_servered(c, "RUST (functional)  largest 2..999", rust_fn_lg, 2, 999);
     bench_servered(c, "RUST (functional)  smallest 2..999", rust_fn_sm, 2, 999);
@@ -189,6 +177,25 @@ pub fn benches(c: &mut Criterion) {
         2,
         999,
     );
+
+    if std::path::Path::new(rust_simd_bolt_lg).exists() {
+        bench_servered(
+            c,
+            "RUST (simd)+BOLT largest 2..999",
+            rust_simd_bolt_lg,
+            2,
+            999,
+        );
+    }
+    if std::path::Path::new(rust_simd_bolt_sm).exists() {
+        bench_servered(
+            c,
+            "RUST (simd)+BOLT smallest 2..999",
+            rust_simd_bolt_sm,
+            2,
+            999,
+        );
+    }
 
     if std::path::Path::new(rust_lg_bolt_opt).exists() {
         bench_servered(c, "RUST+BOLT largest 2..999", rust_lg_bolt_opt, 2, 999);
@@ -215,24 +222,6 @@ pub fn benches(c: &mut Criterion) {
         );
     }
 
-    if std::path::Path::new(rust_simd_bolt_lg).exists() {
-        bench_servered(
-            c,
-            "RUST (simd)+BOLT largest 2..999",
-            rust_simd_bolt_lg,
-            2,
-            999,
-        );
-    }
-    if std::path::Path::new(rust_simd_bolt_sm).exists() {
-        bench_servered(
-            c,
-            "RUST (simd)+BOLT smallest 2..999",
-            rust_simd_bolt_sm,
-            2,
-            999,
-        );
-    }
 
     bench_servered(c, "Common Lisp   largest 2..999", sbcl_lg, 2, 999);
     bench_servered(c, "Common Lisp   smallest 2..999", sbcl_sm, 2, 999);
@@ -251,6 +240,18 @@ pub fn benches(c: &mut Criterion) {
     if std::path::Path::new(go_sm_pgo).exists() {
         bench_servered(c, "GO+PGO smallest 2..999", go_sm_pgo, 2, 999);
     }
+
+    bench_servered(c, "Deno largest 2..999", deno_lg, 2, 999);
+    bench_servered(c, "Deno smallest 2..999", deno_sm, 2, 999);
+
+    bench_servered(c, "Bun largest 2..999", bun_lg, 2, 999);
+    bench_servered(c, "Bun smallest 2..999", bun_sm, 2, 999);
+
+    bench_servered(c, "PyPy largest 2..999", pypy_lg, 2, 999);
+    bench_servered(c, "PyPy smallest 2..999", pypy_sm, 2, 999);
+
+    // bench_servered(c, "Python largest 2..999", python_lg, 2, 999);
+    // bench_servered(c, "Python smallest 2..999", python_sm, 2, 999);
 }
 
 criterion_group! {

@@ -1,5 +1,15 @@
 use palprod_rust::{largest, run_iters_desc, run_server};
+// use palprod_rust::{run_iters_largest, run_server};
 use std::env;
+
+// #[inline(always)]
+// fn do_iters(min: u32, max: u32, iters: u64) -> (Option<u32>, u64, u64) {
+//     run_iters_desc(min, max, iters, largest)
+// }
+
+// fn main() {
+//     run_server(run_iters_largest);
+// }
 
 #[inline(always)]
 fn do_iters(min: u32, max: u32, iters: u64) -> (Option<u32>, u64, u64) {

@@ -317,7 +317,7 @@ pub fn collect_factor_pairs(product: NonZeroU32, min: NonZeroU32, max: NonZeroU3
 ///   If `y_upper < x`, there is no work in that row.
 /// - Iterate `y` from `x` to `y_upper`; the first palindrome in that row is
 ///   the row minimum; update `best` and continue.
-#[inline]
+#[inline(always)]
 pub fn smallest_product(min: NonZeroU32, max: NonZeroU32) -> Option<NonZeroU32> {
     let min = min.get();
     let max = max.get();
@@ -342,7 +342,7 @@ pub fn smallest_product(min: NonZeroU32, max: NonZeroU32) -> Option<NonZeroU32> 
             let mut y = x;
             let mut prod = x * y;
             loop {
-                if is_pal(prod) {
+                if is_pal_v3(prod) {
                     best = prod;
                     break;
                 }
@@ -365,7 +365,7 @@ pub fn smallest_product(min: NonZeroU32, max: NonZeroU32) -> Option<NonZeroU32> 
     }
 }
 
-#[inline]
+#[inline(always)]
 pub fn smallest(min: u32, max: u32) -> Option<PalOut> {
     let min = unsafe { NonZeroU32::new_unchecked(min) };
     let max = unsafe { NonZeroU32::new_unchecked(max) };
@@ -415,7 +415,7 @@ pub fn largest_product(min: NonZeroU32, max: NonZeroU32) -> Option<NonZeroU32> {
             let mut y = max;
             let mut prod = x * y;
             loop {
-                if is_pal(prod) {
+                if is_pal_v3(prod) {
                     best = prod;
                 }
 
@@ -555,6 +555,17 @@ fn accumulate_result(acc: &mut u64, counter: &mut u64, result: Option<PalOut>) {
     }
 }
 
+// A wrapper so we get no inlining for the one time we call largest to produce the base prod to be returned,
+#[inline(never)]
+fn largest_once(min: u32, max: u32) -> Option<PalOut> {
+    largest(min, max)
+}
+
+#[inline(never)]
+fn smallest_once(min: u32, max: u32) -> Option<PalOut> {
+    smallest(min, max)
+}
+
 #[inline(never)]
 pub fn run_iters_desc<F>(min: u32, max: u32, iters: u64, finder: F) -> (Option<u32>, u64, u64)
 where
@@ -584,6 +595,34 @@ where
 }
 
 #[inline(never)]
+pub fn run_iters_largest(min: u32, max: u32, iters: u64) -> (Option<u32>, u64, u64) {
+    let base_prod = largest_once(min, max).map(|pal_out| pal_out.product);
+
+    let mut acc: u64 = 0;
+    let mut counter: u64 = 0;
+    let mut current = max;
+    let start = Instant::now();
+
+    for _ in 0..iters {
+        if let Some(out) = largest(min, current) {
+            acc += counter + out.consume();
+            counter += 1;
+        }
+
+        current = if current <= min { max } else { current - 1 };
+    }
+
+    let nanos = start.elapsed().as_nanos();
+    let elapsed_ns = if nanos > u64::MAX as u128 {
+        u64::MAX
+    } else {
+        nanos as u64
+    };
+
+    (base_prod, acc, elapsed_ns)
+}
+
+#[inline(never)]
 pub fn run_iters_asc<F>(min: u32, max: u32, iters: u64, finder: F) -> (Option<u32>, u64, u64)
 where
     F: Fn(u32, u32) -> Option<PalOut>,
@@ -597,6 +636,34 @@ where
 
     for _ in 0..iters {
         accumulate_result(&mut acc, &mut counter, finder(current, max));
+
+        current = if current >= max { min } else { current + 1 };
+    }
+
+    let nanos = start.elapsed().as_nanos();
+    let elapsed_ns = if nanos > u64::MAX as u128 {
+        u64::MAX
+    } else {
+        nanos as u64
+    };
+
+    (base_prod, acc, elapsed_ns)
+}
+
+#[inline(never)]
+pub fn run_iters_smallest(min: u32, max: u32, iters: u64) -> (Option<u32>, u64, u64) {
+    let base_prod = smallest_once(min, max).map(|pal_out| pal_out.product);
+
+    let mut acc: u64 = 0;
+    let mut counter: u64 = 0;
+    let mut current = min;
+    let start = Instant::now();
+
+    for _ in 0..iters {
+        if let Some(out) = smallest(current, max) {
+            acc += counter + out.consume();
+            counter += 1;
+        }
 
         current = if current >= max { min } else { current + 1 };
     }
