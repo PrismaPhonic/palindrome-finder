@@ -3,6 +3,7 @@ use std::num::NonZeroU32;
 use std::simd::cmp::{SimdPartialEq, SimdPartialOrd};
 use std::simd::num::SimdUint;
 use std::simd::{LaneCount, Mask, Simd, SupportedLaneCount};
+use std::time::Instant;
 
 use crate::collections::{PalOut, Scratch};
 use crate::{divrem_u32_magic, is_pal};
@@ -636,6 +637,72 @@ fn process_compact_until_done_ptr<const CAP: usize>(scratch: &mut Scratch<CAP>) 
     scratch.head = head;
     scratch.len = len;
     None
+}
+
+#[inline(never)]
+fn largest_once(min: u32, max: u32) -> Option<PalOut> {
+    largest(min, max)
+}
+
+#[inline(never)]
+fn smallest_once(min: u32, max: u32) -> Option<PalOut> {
+    smallest(min, max)
+}
+
+#[inline(never)]
+pub fn run_iters_largest(min: u32, max: u32, iters: u64) -> (Option<u32>, u64, u64) {
+    let base_prod = largest_once(min, max).map(|pal_out| pal_out.product);
+
+    let mut acc: u64 = 0;
+    let mut counter: u64 = 0;
+    let mut current = max;
+    let start = Instant::now();
+
+    for _ in 0..iters {
+        if let Some(out) = largest(min, current) {
+            acc += counter + out.consume();
+            counter += 1;
+        }
+
+        current = if current <= min { max } else { current - 1 };
+    }
+
+    let nanos = start.elapsed().as_nanos();
+    let elapsed_ns = if nanos > u64::MAX as u128 {
+        u64::MAX
+    } else {
+        nanos as u64
+    };
+
+    (base_prod, acc, elapsed_ns)
+}
+
+#[inline(never)]
+pub fn run_iters_smallest(min: u32, max: u32, iters: u64) -> (Option<u32>, u64, u64) {
+    let base_prod = smallest_once(min, max).map(|pal_out| pal_out.product);
+
+    let mut acc: u64 = 0;
+    let mut counter: u64 = 0;
+    let mut current = min;
+    let start = Instant::now();
+
+    for _ in 0..iters {
+        if let Some(out) = smallest(current, max) {
+            acc += counter + out.consume();
+            counter += 1;
+        }
+
+        current = if current >= max { min } else { current + 1 };
+    }
+
+    let nanos = start.elapsed().as_nanos();
+    let elapsed_ns = if nanos > u64::MAX as u128 {
+        u64::MAX
+    } else {
+        nanos as u64
+    };
+
+    (base_prod, acc, elapsed_ns)
 }
 
 #[cfg(test)]

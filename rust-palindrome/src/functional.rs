@@ -4,11 +4,11 @@
 //! palindrome search algorithms that mirror the Haskell implementation patterns.
 //! Uses explicit tail calls via the `become` keyword for optimal performance.
 
-use std::num::NonZeroU32;
+use std::{num::NonZeroU32, time::Instant};
 
 use crate::{
     collections::{FactorBuf, PalOut},
-    divrem_u32_magic, has_even_digits, push_pair_unchecked_is_full,
+    divrem_u32_magic, has_even_digits,
 };
 
 const NO_HIT_SMALLEST: u32 = u32::MAX;
@@ -52,7 +52,7 @@ fn half_reverse_loop(m: u32, rev: u32) -> bool {
 
 /// Functional recursive factor pair collection
 /// Mirrors the Haskell `collectPositiveFactorPairs` function
-#[inline(always)]
+#[inline(never)]
 pub fn collect_factor_pairs(product: u32, min: NonZeroU32, max: NonZeroU32) -> FactorBuf {
     let min = min.get();
     let max = max.get();
@@ -77,10 +77,8 @@ fn collect_pairs_recursive(product: u32, x: u32, high: u32, result: &mut FactorB
 
     let (y, r) = divrem_u32_magic(product, x);
     if r == 0 {
-        unsafe {
-            if push_pair_unchecked_is_full(result, x, y) {
-                return;
-            }
+        if result.push_pair_is_full_unchecked(x, y) {
+            return;
         }
     }
 
@@ -203,6 +201,72 @@ fn search_column_largest(x: u32, y: u32, prod: u32, y_lower: u32) -> u32 {
     } else {
         become search_column_largest(x, y - 1, prod - x, y_lower)
     }
+}
+
+#[inline(never)]
+fn largest_once(min: u32, max: u32) -> Option<PalOut> {
+    largest_functional(min, max)
+}
+
+#[inline(never)]
+fn smallest_once(min: u32, max: u32) -> Option<PalOut> {
+    smallest_functional(min, max)
+}
+
+#[inline(never)]
+pub fn run_iters_largest(min: u32, max: u32, iters: u64) -> (Option<u32>, u64, u64) {
+    let base_prod = largest_once(min, max).map(|pal_out| pal_out.product);
+
+    let mut acc: u64 = 0;
+    let mut counter: u64 = 0;
+    let mut current = max;
+    let start = Instant::now();
+
+    for _ in 0..iters {
+        if let Some(out) = largest_functional(min, current) {
+            acc += counter + out.consume();
+            counter += 1;
+        }
+
+        current = if current <= min { max } else { current - 1 };
+    }
+
+    let nanos = start.elapsed().as_nanos();
+    let elapsed_ns = if nanos > u64::MAX as u128 {
+        u64::MAX
+    } else {
+        nanos as u64
+    };
+
+    (base_prod, acc, elapsed_ns)
+}
+
+#[inline(never)]
+pub fn run_iters_smallest(min: u32, max: u32, iters: u64) -> (Option<u32>, u64, u64) {
+    let base_prod = smallest_once(min, max).map(|pal_out| pal_out.product);
+
+    let mut acc: u64 = 0;
+    let mut counter: u64 = 0;
+    let mut current = min;
+    let start = Instant::now();
+
+    for _ in 0..iters {
+        if let Some(out) = smallest_functional(current, max) {
+            acc += counter + out.consume();
+            counter += 1;
+        }
+
+        current = if current >= max { min } else { current + 1 };
+    }
+
+    let nanos = start.elapsed().as_nanos();
+    let elapsed_ns = if nanos > u64::MAX as u128 {
+        u64::MAX
+    } else {
+        nanos as u64
+    };
+
+    (base_prod, acc, elapsed_ns)
 }
 
 #[cfg(test)]

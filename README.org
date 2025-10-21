@@ -285,13 +285,13 @@ Latest average times per iteration for largest:
 
 | Implementation               |  Range | Task    | Time      |
 |------------------------------+--------+---------+-----------|
-| Rust                         | 2..999 | largest | 1.5641 µs |
-| Haskell                      | 2..999 | largest | 1.4366 µs |
+| Rust (PGO + Bolt)            | 2..999 | largest | 1.2320 µs |
+| Rust                         | 2..999 | largest | 1.3205 µs |
 | Rust Functional              | 2..999 | largest | 1.3915 µs |
-| Rust (PGO + Bolt)            | 2..999 | largest | 1.8653 µs |
+| Haskell                      | 2..999 | largest | 1.4366 µs |
 | Rust Functional (PGO + Bolt) | 2..999 | largest | 1.5385 µs |
-| Rust Simd                    | 2..999 | largest | 1.9369 µs |
 | Rust Simd (PGO + Bolt)       | 2..999 | largest | 1.8745 µs |
+| Rust Simd                    | 2..999 | largest | 1.9369 µs |
 | Golang (PGO)                 | 2..999 | largest | 2.1106 µs |
 | Golang                       | 2..999 | largest | 2.1171 µs |
 | Common Lisp                  | 2..999 | largest | 2.1902 µs |
@@ -306,11 +306,11 @@ Latest average times per iteration for smallest
 | Implementation               |  Range | Task     | Time      |
 |------------------------------+--------+----------+-----------|
 | Rust Simd (PGO + Bolt)       | 2..999 | smallest | 1.6333 µs |
+| Rust (PGO + Bolt)            | 2..999 | smallest | 1.6377 µs |
 | Rust Functional              | 2..999 | smallest | 1.6769 µs |
 | Rust                         | 2..999 | smallest | 1.7049 µs |
-| Rust (PGO + Bolt)            | 2..999 | smallest | 1.7061 µs |
-| Rust Functional (PGO + Bolt) | 2..999 | smallest | 1.7569 µs |
 | Rust Simd                    | 2..999 | smallest | 1.7258 µs |
+| Rust Functional (PGO + Bolt) | 2..999 | smallest | 1.7569 µs |
 | Haskell                      | 2..999 | smallest | 1.9480 µs |
 | Golang (PGO)                 | 2..999 | smallest | 2.9107 µs |
 | Common Lisp                  | 2..999 | smallest | 3.1108 µs |

@@ -1,30 +1,5 @@
-use palprod_rust::{largest, run_iters_desc, run_server};
-// use palprod_rust::{run_iters_largest, run_server};
-use std::env;
-
-// #[inline(always)]
-// fn do_iters(min: u32, max: u32, iters: u64) -> (Option<u32>, u64, u64) {
-//     run_iters_desc(min, max, iters, largest)
-// }
-
-// fn main() {
-//     run_server(run_iters_largest);
-// }
-
-#[inline(always)]
-fn do_iters(min: u32, max: u32, iters: u64) -> (Option<u32>, u64, u64) {
-    run_iters_desc(min, max, iters, largest)
-}
+use palprod_rust::{run_iters_largest, run_server};
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
-    if args.iter().any(|a| a == "--server") {
-        run_server(do_iters);
-        return;
-    }
-    let min: u32 = args[1].parse().unwrap();
-    let max: u32 = args[2].parse().unwrap();
-    let iters: u64 = args[3].parse::<u64>().unwrap().max(1);
-    let (prod_opt, _acc, _ns) = do_iters(min, max, iters);
-    println!("{}", prod_opt.unwrap_or_default());
+    run_server(run_iters_largest);
 }

@@ -163,11 +163,37 @@ pub fn benches(c: &mut Criterion) {
     let bun_lg = "../target-bin/palprod-bun-largest";
     let bun_sm = "../target-bin/palprod-bun-smallest";
 
-    bench_servered(c, "RUST               smallest 2..999", rust_sm, 2, 999);
-    bench_servered(c, "RUST               largest 2..999", rust_lg, 2, 999);
-
     bench_servered(c, "RUST (functional)  largest 2..999", rust_fn_lg, 2, 999);
     bench_servered(c, "RUST (functional)  smallest 2..999", rust_fn_sm, 2, 999);
+
+    if std::path::Path::new(rust_lg_bolt_opt).exists() {
+        bench_servered(c, "RUST+BOLT largest 2..999", rust_lg_bolt_opt, 2, 999);
+    }
+    if std::path::Path::new(rust_sm_bolt_opt).exists() {
+        bench_servered(c, "RUST+BOLT smallest 2..999", rust_sm_bolt_opt, 2, 999);
+    }
+
+    if std::path::Path::new(rust_fn_lg_bolt_opt).exists() {
+        bench_servered(
+            c,
+            "RUST (functional)+BOLT largest 2..999",
+            rust_fn_lg_bolt_opt,
+            2,
+            999,
+        );
+    }
+    if std::path::Path::new(rust_fn_sm_bolt_opt).exists() {
+        bench_servered(
+            c,
+            "RUST (functional)+BOLT smallest 2..999",
+            rust_fn_sm_bolt_opt,
+            2,
+            999,
+        );
+    }
+
+    bench_servered(c, "RUST               largest 2..999", rust_lg, 2, 999);
+    bench_servered(c, "RUST               smallest 2..999", rust_sm, 2, 999);
 
     bench_servered(c, "RUST (simd)        largest 2..999", rust_simd_lg, 2, 999);
     bench_servered(
@@ -192,31 +218,6 @@ pub fn benches(c: &mut Criterion) {
             c,
             "RUST (simd)+BOLT smallest 2..999",
             rust_simd_bolt_sm,
-            2,
-            999,
-        );
-    }
-
-    if std::path::Path::new(rust_lg_bolt_opt).exists() {
-        bench_servered(c, "RUST+BOLT largest 2..999", rust_lg_bolt_opt, 2, 999);
-    }
-    if std::path::Path::new(rust_sm_bolt_opt).exists() {
-        bench_servered(c, "RUST+BOLT smallest 2..999", rust_sm_bolt_opt, 2, 999);
-    }
-    if std::path::Path::new(rust_fn_lg_bolt_opt).exists() {
-        bench_servered(
-            c,
-            "RUST (functional)+BOLT largest 2..999",
-            rust_fn_lg_bolt_opt,
-            2,
-            999,
-        );
-    }
-    if std::path::Path::new(rust_fn_sm_bolt_opt).exists() {
-        bench_servered(
-            c,
-            "RUST (functional)+BOLT smallest 2..999",
-            rust_fn_sm_bolt_opt,
             2,
             999,
         );

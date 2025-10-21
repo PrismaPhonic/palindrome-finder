@@ -114,6 +114,33 @@ pub fn is_pal(n: u32) -> bool {
 }
 
 #[inline(always)]
+pub fn is_pal_old(n: u32) -> bool {
+    if n < 10 {
+        return true;
+    }
+
+    // Non-zero numbers ending in 0 cannot be palindromes.
+    if n.is_multiple_of(10) {
+        return false;
+    }
+
+    // Even-length palindromes must be divisible by 11.
+    if has_even_digits(n) && !n.is_multiple_of(11) {
+        return false;
+    }
+
+    // Half-reverse
+    let mut m = n;
+    let mut rev = 0;
+    while m > rev {
+        rev = rev * 10 + m % 10;
+        m /= 10;
+    }
+
+    m == rev || m == rev / 10
+}
+
+#[inline(always)]
 pub fn is_pal_v3(n: u32) -> bool {
     // 1 digit
     if n < 10 {
@@ -245,23 +272,6 @@ pub fn is_multiple_of_magic(n: u32, d: u32) -> bool {
     divrem_u32_magic(n, d).1 == 0
 }
 
-// Pushes a pair into ArrayVec without checking length. Asserts safety in debug
-// builds.
-// Returns true when full.
-#[inline(always)]
-unsafe fn push_pair_unchecked_is_full(out: &mut FactorBuf, x: u32, y: u32) -> bool {
-    debug_assert!(out.len() <= 2);
-    let len = out.len();
-    let ptr = out.as_mut_ptr();
-    unsafe {
-        core::ptr::write(ptr.add(len), x);
-        core::ptr::write(ptr.add(len + 1), y);
-    }
-    out.set_len(len + 2);
-    // Len was previously 2, so it's now 4 and we are full.
-    len == 2
-}
-
 #[inline]
 pub fn collect_factor_pairs(product: NonZeroU32, min: NonZeroU32, max: NonZeroU32) -> FactorBuf {
     let product = product.get();
@@ -342,7 +352,9 @@ pub fn smallest_product(min: NonZeroU32, max: NonZeroU32) -> Option<NonZeroU32> 
             let mut y = x;
             let mut prod = x * y;
             loop {
-                if is_pal_v3(prod) {
+                // For some reason that I can't explain this performs much
+                // better for smallest.
+                if is_pal_old(prod) {
                     best = prod;
                     break;
                 }
@@ -417,6 +429,7 @@ pub fn largest_product(min: NonZeroU32, max: NonZeroU32) -> Option<NonZeroU32> {
             loop {
                 if is_pal_v3(prod) {
                     best = prod;
+                    break;
                 }
 
                 if y == y_lower {
@@ -550,7 +563,9 @@ where
 #[inline(always)]
 fn accumulate_result(acc: &mut u64, counter: &mut u64, result: Option<PalOut>) {
     if let Some(out) = result {
-        *acc += *counter + out.consume();
+        *acc += out.product as u64
+            + *counter
+            + out.pairs.into_iter().map(|value| value as u64).sum::<u64>();
         *counter += 1;
     }
 }
@@ -926,5 +941,394 @@ mod tests {
             .max()
             .unwrap_or(0);
         assert_eq!(max_len, 4, "observed max_len = {}", max_len);
+    }
+
+    // Generate all possible palindrome inputs from the range 2..=999
+    fn palindrome_inputs() -> Vec<u32> {
+        use std::collections::HashSet;
+        let set: HashSet<u32> = (2u32..=999)
+            .flat_map(|a| (2u32..=999).map(move |b| a * b))
+            .collect();
+        let mut vec: Vec<u32> = set.into_iter().collect();
+        vec.sort();
+        vec
+    }
+
+    #[test]
+    fn compare_is_pal_implementations() {
+        let inputs = palindrome_inputs();
+        println!("Testing {} palindrome inputs", inputs.len());
+
+        let mut differences = Vec::new();
+        for &n in &inputs {
+            let old_result = is_pal_old(n);
+            let new_result = is_pal_v3(n);
+
+            if old_result != new_result {
+                differences.push((n, old_result, new_result));
+                if differences.len() <= 10 {
+                    // Print first 10 differences
+                    println!(
+                        "Difference at n={}: old={}, new={}",
+                        n, old_result, new_result
+                    );
+                }
+            }
+        }
+
+        if !differences.is_empty() {
+            println!(
+                "Found {} differences out of {} inputs",
+                differences.len(),
+                inputs.len()
+            );
+            println!("First few differences:");
+            for (n, old, new) in differences.iter().take(5) {
+                println!("  n={}: old={}, new={}", n, old, new);
+            }
+        } else {
+            println!("No differences found - both implementations agree on all inputs");
+        }
+
+        // This test will fail if there are differences, helping us identify the issue
+        assert!(
+            differences.is_empty(),
+            "Found {} differences between is_pal_old and is_pal",
+            differences.len()
+        );
+    }
+
+    #[test]
+    fn compare_largest_implementations() {
+        // Test the specific range that's causing issues
+        let ranges = [
+            (100, 999),
+            (200, 999),
+            (300, 999),
+            (400, 999),
+            (500, 999),
+            (600, 999),
+            (700, 999),
+            (800, 999),
+            (900, 999),
+        ];
+
+        for &(min, max) in &ranges {
+            let old_result = largest_old(min, max);
+            let new_result = largest(min, max);
+
+            if old_result != new_result {
+                println!("Difference in range ({}, {}):", min, max);
+                println!("  old: {:?}", old_result);
+                println!("  new: {:?}", new_result);
+            }
+        }
+    }
+
+    #[test]
+    fn test_accumulate_function() {
+        // Test the accumulate function with the problematic values
+        let mut acc = 0u64;
+        let mut counter = 0u64;
+
+        // Test with a known PalOut
+        let pal_out = PalOut {
+            product: 4,
+            pairs: [1, 4, 2, 2], // This represents pairs (1,4) and (2,2)
+        };
+
+        println!("Testing accumulate with PalOut: {:?}", pal_out);
+        println!("Before: acc={}, counter={}", acc, counter);
+
+        // Create a copy for consume() call
+        let pal_out_copy = PalOut {
+            product: pal_out.product,
+            pairs: pal_out.pairs,
+        };
+
+        accumulate_result(&mut acc, &mut counter, Some(pal_out));
+
+        println!("After: acc={}, counter={}", acc, counter);
+        println!("consume() result: {}", pal_out_copy.consume());
+
+        // Test the original logic manually
+        let mut acc_manual = 0u64;
+        let mut counter_manual = 0u64;
+        let product = 4u32;
+        let pairs = [1u32, 4u32, 2u32, 2u32];
+
+        acc_manual += product as u64
+            + counter_manual
+            + pairs.into_iter().map(|value| value as u64).sum::<u64>();
+        counter_manual += 1;
+
+        println!(
+            "Manual calculation: acc={}, counter={}",
+            acc_manual, counter_manual
+        );
+        println!(
+            "Expected: product={} + counter={} + sum_of_pairs={}",
+            product,
+            0,
+            pairs.into_iter().sum::<u32>()
+        );
+    }
+
+    #[test]
+    fn test_specific_problematic_range() {
+        // Test the specific range that's causing issues in the correctness test
+        let min = 2u32;
+        let max = 999u32;
+
+        println!("Testing largest({}, {})", min, max);
+
+        let old_result = largest_old(min, max);
+        let new_result = largest(min, max);
+
+        println!("Old result: {:?}", old_result);
+        println!("New result: {:?}", new_result);
+
+        if old_result != new_result {
+            println!("DIFFERENCE FOUND!");
+            if let (Some(old), Some(new)) = (old_result, new_result) {
+                println!("Old product: {}, pairs: {:?}", old.product, old.pairs);
+                println!("New product: {}, pairs: {:?}", new.product, new.pairs);
+
+                // Test if the products are palindromes
+                println!("Old product is palindrome: {}", is_pal_old(old.product));
+                println!("New product is palindrome: {}", is_pal_old(new.product));
+                println!("Old product is palindrome (v3): {}", is_pal_v3(old.product));
+                println!("New product is palindrome (v3): {}", is_pal_v3(new.product));
+            }
+        } else {
+            println!("Results are identical");
+        }
+    }
+
+    #[test]
+    fn test_run_iters_desc_comparison() {
+        // Test the run_iters_desc function with the problematic range
+        let min = 2u32;
+        let max = 999u32;
+        let iters = 10000u64;
+
+        println!("Testing run_iters_desc({}, {}, {})", min, max, iters);
+
+        // Test with old implementation
+        let old_result = run_iters_desc_old(min, max, iters, largest_old);
+        println!("Old result: {:?}", old_result);
+
+        // Test with new implementation
+        let new_result = run_iters_desc(min, max, iters, largest);
+        println!("New result: {:?}", new_result);
+
+        if old_result != new_result {
+            println!("DIFFERENCE FOUND in run_iters_desc!");
+        } else {
+            println!("Results are identical");
+        }
+    }
+
+    #[test]
+    fn test_product_comparison_cycle() {
+        // Test cycling through the range once (999 down to 2) and compare products
+        let min = 2u32;
+        let max = 999u32;
+
+        println!(
+            "Testing product comparison cycle from {} down to {}",
+            max, min
+        );
+
+        // Test old implementation
+        let mut products_old = Vec::new();
+        let mut current_max_old = max;
+
+        while current_max_old >= min {
+            let product_old =
+                largest_product_old(unsafe { NonZeroU32::new_unchecked(min) }, unsafe {
+                    NonZeroU32::new_unchecked(current_max_old)
+                });
+            products_old.push((current_max_old, product_old));
+            current_max_old -= 1;
+        }
+
+        // Test new implementation
+        let mut products_new = Vec::new();
+        let mut current_max_new = max;
+
+        while current_max_new >= min {
+            let product_new = largest_product(unsafe { NonZeroU32::new_unchecked(min) }, unsafe {
+                NonZeroU32::new_unchecked(current_max_new)
+            });
+            products_new.push((current_max_new, product_new));
+            current_max_new -= 1;
+        }
+
+        // Compare results
+        let mut differences = Vec::new();
+        for ((max_old, prod_old), (max_new, prod_new)) in
+            products_old.iter().zip(products_new.iter())
+        {
+            if max_old != max_new {
+                println!("ERROR: max values don't match: {} vs {}", max_old, max_new);
+                break;
+            }
+            if prod_old != prod_new {
+                differences.push((*max_old, *prod_old, *prod_new));
+                if differences.len() <= 10 {
+                    println!(
+                        "Difference at max={}: old={:?}, new={:?}",
+                        max_old, prod_old, prod_new
+                    );
+                }
+            }
+        }
+
+        if !differences.is_empty() {
+            println!(
+                "Found {} differences out of {} comparisons",
+                differences.len(),
+                products_old.len()
+            );
+            println!("First few differences:");
+            for (max_val, old_prod, new_prod) in differences.iter().take(5) {
+                println!("  max={}: old={:?}, new={:?}", max_val, old_prod, new_prod);
+            }
+        } else {
+            println!("No differences found - both implementations find identical products");
+        }
+    }
+
+    #[test]
+    fn test_specific_palindrome_888888() {
+        let n = 888888u32;
+        println!("Testing palindrome: {}", n);
+        println!("is_pal_old({}) = {}", n, is_pal_old(n));
+        println!("is_pal_v3({}) = {}", n, is_pal_v3(n));
+        println!("is_pal({}) = {}", n, is_pal(n));
+
+        // Let's also test 886688
+        let n2 = 886688u32;
+        println!("Testing palindrome: {}", n2);
+        println!("is_pal_old({}) = {}", n2, is_pal_old(n2));
+        println!("is_pal_v3({}) = {}", n2, is_pal_v3(n2));
+        println!("is_pal({}) = {}", n2, is_pal(n2));
+    }
+
+    #[test]
+    fn test_largest_product_specific_range() {
+        // Test the specific range where we found differences
+        let min = 2u32;
+        let max = 992u32; // One of the problematic ranges
+
+        println!("Testing largest_product({}, {})", min, max);
+
+        let old_result = largest_product_old(unsafe { NonZeroU32::new_unchecked(min) }, unsafe {
+            NonZeroU32::new_unchecked(max)
+        });
+        let new_result = largest_product(unsafe { NonZeroU32::new_unchecked(min) }, unsafe {
+            NonZeroU32::new_unchecked(max)
+        });
+
+        println!("Old result: {:?}", old_result);
+        println!("New result: {:?}", new_result);
+
+        if old_result != new_result {
+            println!("DIFFERENCE FOUND!");
+            if let (Some(old_prod), Some(new_prod)) = (old_result, new_result) {
+                println!(
+                    "Old product: {}, New product: {}",
+                    old_prod.get(),
+                    new_prod.get()
+                );
+                println!("Old is palindrome: {}", is_pal_old(old_prod.get()));
+                println!("New is palindrome: {}", is_pal_old(new_prod.get()));
+            }
+        } else {
+            println!("Results are identical");
+        }
+    }
+
+    // Add the old run_iters_desc function for comparison
+    fn run_iters_desc_old<F>(min: u32, max: u32, iters: u64, finder: F) -> (Option<u32>, u64, u64)
+    where
+        F: Fn(u32, u32) -> Option<PalOut>,
+    {
+        let base_prod = finder(min, max).map(|pal_out| pal_out.product);
+
+        let mut acc: u64 = 0;
+        let mut counter: u64 = 0;
+        let mut current_max = max;
+
+        let start = std::time::Instant::now();
+        for _ in 0..iters {
+            if let Some(result) = finder(min, current_max) {
+                accumulate_result_old(&mut acc, &mut counter, Some(result));
+            } else {
+                accumulate_result_old(&mut acc, &mut counter, None);
+            }
+
+            current_max = if current_max <= min {
+                max
+            } else {
+                current_max - 1
+            };
+        }
+        let elapsed = start.elapsed();
+        let nanos = elapsed.as_nanos();
+        let elapsed_ns = if nanos > u64::MAX as u128 {
+            u64::MAX
+        } else {
+            nanos as u64
+        };
+
+        (base_prod, acc, elapsed_ns)
+    }
+
+    fn accumulate_result_old(acc: &mut u64, counter: &mut u64, result: Option<PalOut>) {
+        if let Some(out) = result {
+            *acc += out.product as u64
+                + *counter
+                + out.pairs.into_iter().map(|value| value as u64).sum::<u64>();
+            *counter += 1;
+        }
+    }
+
+    // Add the old largest function for comparison
+    fn largest_old(min: u32, max: u32) -> Option<PalOut> {
+        let min = unsafe { NonZeroU32::new_unchecked(min) };
+        let max = unsafe { NonZeroU32::new_unchecked(max) };
+        largest_product_old(min, max).map(|product| {
+            let factor_pairs = collect_factor_pairs(product, min, max);
+            factor_pairs.with_product(product.into())
+        })
+    }
+
+    fn largest_product_old(min: NonZeroU32, max: NonZeroU32) -> Option<NonZeroU32> {
+        let mut best = 0;
+        let mut x = max.get();
+
+        while x >= min.get() {
+            let mut y = x;
+            while y >= min.get() {
+                let product = x * y;
+                if product <= best {
+                    break;
+                }
+                if is_pal_old(product) {
+                    best = product;
+                    break;
+                }
+                y -= 1;
+            }
+            x -= 1;
+        }
+
+        if best > 0 {
+            Some(unsafe { NonZeroU32::new_unchecked(best) })
+        } else {
+            None
+        }
     }
 }

@@ -13,25 +13,22 @@ impl FactorBuf {
         }
     }
 
+    /// Pushes a pair unchecked, and returns when it's full. It's up to the
+    /// caller to no longer call this function once it receives a true from a
+    /// call of this.
+    ///
+    /// This is dangerous, but is done to eliminate bounds checking as much as
+    /// possible.
     #[inline(always)]
-    pub fn push_pair(&mut self, x: u32, y: u32) {
+    pub fn push_pair_is_full_unchecked(&mut self, x: u32, y: u32) -> bool {
         debug_assert!(self.len <= 4);
-
-        if self.len == 0 {
-            let out = self.as_mut_ptr();
-            unsafe {
-                core::ptr::write(out.add(0), x);
-                core::ptr::write(out.add(1), y);
-            }
-            self.len = 2;
-        } else if self.len == 2 {
-            let out = self.as_mut_ptr();
-            unsafe {
-                core::ptr::write(out.add(2), x);
-                core::ptr::write(out.add(3), y);
-            }
-            self.len = 4;
+        let out = self.as_mut_ptr();
+        unsafe {
+            core::ptr::write(out.add(self.len), x);
+            core::ptr::write(out.add(self.len + 1), y);
         }
+        self.len += 2;
+        self.len == 4
     }
 
     #[inline(always)]
@@ -53,11 +50,17 @@ impl FactorBuf {
     }
 
     #[inline(always)]
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    #[inline(always)]
     pub fn set_len(&mut self, len: usize) {
         self.len = len;
     }
 }
 
+#[derive(PartialEq, Debug)]
 pub struct PalOut {
     pub product: u32,
     pub pairs: [u32; 4],
