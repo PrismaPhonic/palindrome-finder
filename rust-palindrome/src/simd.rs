@@ -8,10 +8,12 @@ use std::time::Instant;
 use crate::collections::{PalOut, Scratch};
 use crate::{divrem_u32_magic, is_pal};
 
-const SIMD_WIDTH: usize = 8;
-const SIMD_OFFSETS: Simd<u32, SIMD_WIDTH> = Simd::from_array([0, 1, 2, 3, 4, 5, 6, 7]);
-const HALF_SIMD_OFFSETS: Simd<u32, 4> = Simd::from_array([0, 1, 2, 3]);
-const QUARTER_SIMD_OFFSETS: Simd<u32, 2> = Simd::from_array([0, 1]);
+const SIMD_WIDTH: usize = 16;
+const SIMD_OFFSETS: Simd<u32, SIMD_WIDTH> =
+    Simd::from_array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
+const HALF_SIMD_OFFSETS: Simd<u32, 8> = Simd::from_array([0, 1, 2, 3, 4, 5, 6, 7]);
+const QUARTER_SIMD_OFFSETS: Simd<u32, 4> = Simd::from_array([0, 1, 2, 3]);
+const EIGHTH_SIMD_OFFSETS: Simd<u32, 2> = Simd::from_array([0, 1]);
 const SCRATCH_CAPACITY: usize = SIMD_WIDTH * 2;
 
 type SimdMask<const LANES: usize> = Mask<i32, LANES>;
@@ -190,6 +192,7 @@ pub fn smallest_product(min: u32, max: u32) -> Option<u32> {
         let full_chunk_ceiling = y_upper - (lane_span - 1);
         let half_chunk_ceiling = y_upper - ((lane_span / 2) - 1);
         let quarter_chunk_ceiling = y_upper - ((lane_span / 4) - 1);
+        let eighth_chunk_ceiling = y_upper - ((lane_span / 8) - 1);
         let mut y_base = x;
 
         while y_base <= y_upper {
@@ -216,9 +219,18 @@ pub fn smallest_product(min: u32, max: u32) -> Option<u32> {
                     best = row_best;
                     break;
                 }
-                y_base += 4;
+                y_base += 8;
             } else if y_base <= quarter_chunk_ceiling {
                 let prod_vec = Simd::splat(x) * (Simd::splat(y_base) + QUARTER_SIMD_OFFSETS);
+                if let Some(row_best) =
+                    process_palindrome_candidates(prod_vec, Simd::splat(10), &mut scratch)
+                {
+                    best = row_best;
+                    break;
+                }
+                y_base += 4;
+            } else if y_base <= eighth_chunk_ceiling {
+                let prod_vec = Simd::splat(x) * (Simd::splat(y_base) + EIGHTH_SIMD_OFFSETS);
                 if let Some(row_best) =
                     process_palindrome_candidates(prod_vec, Simd::splat(10), &mut scratch)
                 {
@@ -418,6 +430,7 @@ pub fn largest_product(min: u32, max: u32) -> Option<u32> {
         let full_chunk_floor = y_lower + (lane_span - 1);
         let half_chunk_floor = y_lower + ((lane_span / 2) - 1);
         let quarter_chunk_floor = y_lower + ((lane_span / 4) - 1);
+        let eighth_chunk_floor = y_lower + ((lane_span / 8) - 1);
         let mut y_head = max;
 
         while y_head >= y_lower {
@@ -444,9 +457,18 @@ pub fn largest_product(min: u32, max: u32) -> Option<u32> {
                     best = row_best;
                     break;
                 }
-                y_head -= 4;
+                y_head -= 8;
             } else if y_head >= quarter_chunk_floor {
                 let prod_vec = Simd::splat(x) * (Simd::splat(y_head) - QUARTER_SIMD_OFFSETS);
+                if let Some(row_best) =
+                    process_palindrome_candidates(prod_vec, Simd::splat(10), &mut scratch)
+                {
+                    best = row_best;
+                    break;
+                }
+                y_head -= 4;
+            } else if y_head >= eighth_chunk_floor {
+                let prod_vec = Simd::splat(x) * (Simd::splat(y_head) - EIGHTH_SIMD_OFFSETS);
                 if let Some(row_best) =
                     process_palindrome_candidates(prod_vec, Simd::splat(10), &mut scratch)
                 {
