@@ -221,7 +221,11 @@ pub fn is_pal_v2(n: u32) -> bool {
         }
     }
 
-    if parity == 1 { m == rev } else { m == rev / 10 }
+    if parity == 1 {
+        m == rev
+    } else {
+        m == rev / 10
+    }
 }
 
 #[inline(always)]
