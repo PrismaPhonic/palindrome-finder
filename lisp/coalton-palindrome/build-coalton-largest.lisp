@@ -1,5 +1,7 @@
 (require :asdf)
 (require :uiop)
+(load "~/quicklisp/setup.lisp")
+(ql:quickload :coalton)
 
 (let* ((here (uiop:pathname-directory-pathname *load-truename*))
        (runner "src/runner-largest.lisp")

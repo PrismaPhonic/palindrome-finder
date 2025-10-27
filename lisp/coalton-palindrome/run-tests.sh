@@ -13,7 +13,7 @@ if ! command -v "$SBCL_BIN" >/dev/null 2>&1; then
 fi
 
 "$SBCL_BIN" --noinform --disable-debugger \
-  --eval "(load \"~/.quicklisp/setup.lisp\")" \
+  --eval "(load \"~/quicklisp/setup.lisp\")" \
   --eval "(declaim (optimize (speed 3) (safety 0) (debug 0)))" \
   --eval "(setf (symbol-plist ':coalton-config) nil)" \
   --eval "(dolist (kv '((:compiler-mode \"release\") (:perform-specialization t) (:perform-inlining t) (:emit-type-annotations t))) (setf (get ':coalton-config (first kv)) (second kv)))" \
